@@ -1,0 +1,35 @@
+# --- Go (cmd/, internal/, pkg/) ---
+/bin/
+*.exe
+*.test
+*.out
+
+# --- Env files (real secrets; .env.example files are tracked) ---
+.env
+.env.local
+*.env.local
+
+# --- Python (services/cv) ---
+services/cv/.venv/
+services/cv/__pycache__/
+services/cv/app/__pycache__/
+**/__pycache__/
+*.pyc
+
+# --- Node / Next.js (web/) ---
+web/node_modules/
+web/.next/
+web/out/
+web/*.tsbuildinfo
+web/next-env.d.ts
+npm-debug.log*
+
+# --- Editor / OS ---
+.DS_Store
+*.swp
+
+# --- Local/dev artifacts ---
+/tmp/
+*.log
+.claude
+.claudeignore
