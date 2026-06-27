@@ -77,7 +77,7 @@ func (q *Queries) GetApiKeyByHash(ctx context.Context, keyHash string) (ApiKey, 
 }
 
 const getSubscriptionByWorkspace = `-- name: GetSubscriptionByWorkspace :one
-SELECT id, workspace_id, stripe_subscription_id, stripe_price_id, plan, status, current_period_start, current_period_end, cancel_at, canceled_at, created_at, updated_at FROM subscriptions WHERE workspace_id = $1 ORDER BY created_at DESC LIMIT 1
+SELECT id, workspace_id, provider_subscription_id, provider_plan_id, plan, status, current_period_start, current_period_end, cancel_at, canceled_at, created_at, updated_at, provider FROM subscriptions WHERE workspace_id = $1 ORDER BY created_at DESC LIMIT 1
 `
 
 func (q *Queries) GetSubscriptionByWorkspace(ctx context.Context, workspaceID uuid.UUID) (Subscription, error) {
@@ -86,8 +86,8 @@ func (q *Queries) GetSubscriptionByWorkspace(ctx context.Context, workspaceID uu
 	err := row.Scan(
 		&i.ID,
 		&i.WorkspaceID,
-		&i.StripeSubscriptionID,
-		&i.StripePriceID,
+		&i.ProviderSubscriptionID,
+		&i.ProviderPlanID,
 		&i.Plan,
 		&i.Status,
 		&i.CurrentPeriodStart,
@@ -96,6 +96,7 @@ func (q *Queries) GetSubscriptionByWorkspace(ctx context.Context, workspaceID uu
 		&i.CanceledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Provider,
 	)
 	return i, err
 }
@@ -152,31 +153,33 @@ func (q *Queries) RevokeApiKey(ctx context.Context, arg RevokeApiKeyParams) erro
 }
 
 const upsertSubscription = `-- name: UpsertSubscription :one
-INSERT INTO subscriptions (workspace_id, stripe_subscription_id, stripe_price_id, plan, status, current_period_start, current_period_end)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (stripe_subscription_id) DO UPDATE
+INSERT INTO subscriptions (workspace_id, provider, provider_subscription_id, provider_plan_id, plan, status, current_period_start, current_period_end)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (provider_subscription_id) DO UPDATE
 SET plan = EXCLUDED.plan, status = EXCLUDED.status,
     current_period_start = EXCLUDED.current_period_start,
     current_period_end = EXCLUDED.current_period_end,
     updated_at = NOW()
-RETURNING id, workspace_id, stripe_subscription_id, stripe_price_id, plan, status, current_period_start, current_period_end, cancel_at, canceled_at, created_at, updated_at
+RETURNING id, workspace_id, provider_subscription_id, provider_plan_id, plan, status, current_period_start, current_period_end, cancel_at, canceled_at, created_at, updated_at, provider
 `
 
 type UpsertSubscriptionParams struct {
-	WorkspaceID          uuid.UUID          `json:"workspace_id"`
-	StripeSubscriptionID string             `json:"stripe_subscription_id"`
-	StripePriceID        string             `json:"stripe_price_id"`
-	Plan                 string             `json:"plan"`
-	Status               string             `json:"status"`
-	CurrentPeriodStart   pgtype.Timestamptz `json:"current_period_start"`
-	CurrentPeriodEnd     pgtype.Timestamptz `json:"current_period_end"`
+	WorkspaceID            uuid.UUID          `json:"workspace_id"`
+	Provider               string             `json:"provider"`
+	ProviderSubscriptionID string             `json:"provider_subscription_id"`
+	ProviderPlanID         string             `json:"provider_plan_id"`
+	Plan                   string             `json:"plan"`
+	Status                 string             `json:"status"`
+	CurrentPeriodStart     pgtype.Timestamptz `json:"current_period_start"`
+	CurrentPeriodEnd       pgtype.Timestamptz `json:"current_period_end"`
 }
 
 func (q *Queries) UpsertSubscription(ctx context.Context, arg UpsertSubscriptionParams) (Subscription, error) {
 	row := q.db.QueryRow(ctx, upsertSubscription,
 		arg.WorkspaceID,
-		arg.StripeSubscriptionID,
-		arg.StripePriceID,
+		arg.Provider,
+		arg.ProviderSubscriptionID,
+		arg.ProviderPlanID,
 		arg.Plan,
 		arg.Status,
 		arg.CurrentPeriodStart,
@@ -186,8 +189,8 @@ func (q *Queries) UpsertSubscription(ctx context.Context, arg UpsertSubscription
 	err := row.Scan(
 		&i.ID,
 		&i.WorkspaceID,
-		&i.StripeSubscriptionID,
-		&i.StripePriceID,
+		&i.ProviderSubscriptionID,
+		&i.ProviderPlanID,
 		&i.Plan,
 		&i.Status,
 		&i.CurrentPeriodStart,
@@ -196,6 +199,7 @@ func (q *Queries) UpsertSubscription(ctx context.Context, arg UpsertSubscription
 		&i.CanceledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Provider,
 	)
 	return i, err
 }

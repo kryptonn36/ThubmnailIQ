@@ -53,7 +53,8 @@ func NewRouter(h *Handlers, jwtSvc *jwt.Service, log zerolog.Logger) *gin.Engine
 	authed.GET("/tracking", h.Tracking.List)
 
 	authed.GET("/billing/plans", h.Billing.Plans)
-	authed.POST("/billing/subscribe", h.Billing.Subscribe)
+	authed.POST("/billing/checkout", h.Billing.Checkout)
+	authed.POST("/billing/checkout/verify", h.Billing.ConfirmCheckout)
 	authed.POST("/api-keys", h.Billing.CreateAPIKey)
 	authed.GET("/api-keys", h.Billing.ListAPIKeys)
 	authed.DELETE("/api-keys/:id", h.Billing.RevokeAPIKey)

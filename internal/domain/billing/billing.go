@@ -28,13 +28,14 @@ var Plans = []Plan{
 }
 
 type Subscription struct {
-	ID                   uuid.UUID `json:"id"`
-	WorkspaceID          uuid.UUID `json:"workspace_id"`
-	StripeSubscriptionID string    `json:"stripe_subscription_id"`
-	Plan                 string    `json:"plan"`
-	Status               string    `json:"status"`
-	CurrentPeriodStart   time.Time `json:"current_period_start"`
-	CurrentPeriodEnd     time.Time `json:"current_period_end"`
+	ID                     uuid.UUID `json:"id"`
+	WorkspaceID            uuid.UUID `json:"workspace_id"`
+	Provider               string    `json:"provider"`
+	ProviderSubscriptionID string    `json:"provider_subscription_id"`
+	Plan                   string    `json:"plan"`
+	Status                 string    `json:"status"`
+	CurrentPeriodStart     time.Time `json:"current_period_start"`
+	CurrentPeriodEnd       time.Time `json:"current_period_end"`
 }
 
 type APIKey struct {

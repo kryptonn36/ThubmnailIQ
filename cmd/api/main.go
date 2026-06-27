@@ -7,11 +7,13 @@ import (
 	"github.com/hibiken/asynq"
 
 	"github.com/thumbnailiq/thumbnailiq/internal/config"
+	"github.com/thumbnailiq/thumbnailiq/internal/domain/payment"
 	"github.com/thumbnailiq/thumbnailiq/internal/handler"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/cv"
+	"github.com/thumbnailiq/thumbnailiq/internal/infra/payment/razorpay"
+	"github.com/thumbnailiq/thumbnailiq/internal/infra/payment/stripe"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/postgres"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/s3"
-	"github.com/thumbnailiq/thumbnailiq/internal/infra/stripe"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/youtube"
 	"github.com/thumbnailiq/thumbnailiq/internal/server"
 	analysisuc "github.com/thumbnailiq/thumbnailiq/internal/usecase/analysis"
@@ -61,7 +63,14 @@ func main() {
 		log.Info().Msg("YOUTUBE_API_KEY not set, using synthetic competitor data")
 	}
 
-	stripeClient := stripe.NewClient(cfg.Stripe.SecretKey)
+	var gateway payment.Gateway
+	switch cfg.Payment.Provider {
+	case "stripe":
+		gateway = stripe.NewClient(cfg.Stripe.SecretKey)
+	default:
+		gateway = razorpay.NewClient(cfg.Razorpay.KeyID, cfg.Razorpay.KeySecret)
+	}
+	log.Info().Str("provider", cfg.Payment.Provider).Msg("payment gateway configured")
 
 	queueClient := asynq.NewClient(asynq.RedisClientOpt{Addr: cfg.Redis.Addr, Password: cfg.Redis.Password, DB: cfg.Redis.DB})
 	defer queueClient.Close()
@@ -78,7 +87,7 @@ func main() {
 	userUC := useruc.NewUsecase(userRepo, workspaceRepo, jwtSvc)
 	workspaceUC := workspaceuc.NewUsecase(workspaceRepo, userRepo)
 	analysisUC := analysisuc.NewUsecase(analysisRepo, workspaceRepo, storage, cvClient, queueClient)
-	billingUC := billinguc.NewUsecase(billingRepo, workspaceRepo, stripeClient)
+	billingUC := billinguc.NewUsecase(billingRepo, workspaceRepo, gateway, cfg.Payment.Currency)
 	trackingUC := trackinguc.NewUsecase(competitorRepo)
 	viralDBUC := viraldbuc.NewUsecase(viralDBRepo)
 

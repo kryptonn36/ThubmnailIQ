@@ -15,8 +15,10 @@ runnable multi-service stack:
 
 Everything runs with **zero API keys**. YouTube competitor data is synthetic (seeded by keyword,
 so it's deterministic), and the "curiosity" sub-score uses a heuristic instead of a real Gemini
-call. Set `YOUTUBE_API_KEY` / `GEMINI_API_KEY` / `STRIPE_SECRET_KEY` in `.env` to switch any of
-those to the real thing — see `.env.example`.
+call. Set `YOUTUBE_API_KEY` / `GEMINI_API_KEY` in `.env` to switch either of those to the real
+thing — see `.env.example`. Billing runs against real Razorpay test-mode keys
+(`RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET`) by default since Stripe requires an account
+invitation; set `PAYMENT_PROVIDER=stripe` + `STRIPE_SECRET_KEY` once that's approved.
 
 Out of scope for this build (see blueprint for the full vision): browser extension, Kubernetes/
 Terraform manifests, CI/CD pipelines, team comments/PDF export, viral thumbnail DB seeding.
@@ -185,8 +187,10 @@ cd web && npm run lint
   analyzes real competitor thumbnails through `cv-service`.
 - **Curiosity score**: heuristic (keyword/number/emotion presence) unless `GEMINI_API_KEY` is set,
   in which case it calls the real Gemini API.
-- **Billing**: Stripe is mocked — `Subscribe` mints a fake subscription ID and immediately marks
-  it active. No real payment flow.
+- **Billing**: real checkout flow against Razorpay (`POST /billing/checkout` creates an order,
+  the frontend opens Razorpay's Checkout widget, `POST /billing/checkout/verify` checks the HMAC
+  signature before activating the plan). Stripe is still mocked behind the same `payment.Gateway`
+  interface — switch `PAYMENT_PROVIDER=stripe` once your account is approved.
 - **Branding sub-score**: fixed at a neutral 50; the blueprint's "3+ historical thumbnails from
   the same channel" signal isn't collected in this build.
 - **Eye-contact/gaze and arrow/object detection**: not available without heavier models; those
@@ -204,7 +208,7 @@ cmd/api, cmd/worker        Go entrypoints
 internal/domain            Entities + repository interfaces
 internal/usecase           Business logic
 internal/handler           Gin HTTP handlers
-internal/infra             Postgres/Redis/S3/YouTube/Gemini/Stripe/CV clients
+internal/infra             Postgres/Redis/S3/YouTube/Gemini/Razorpay/Stripe/CV clients
 internal/scoring           ThumbnailIQ score engine + suggestion catalog
 internal/worker            Asynq task handlers (the actual analysis pipeline)
 db/migrations, db/queries  goose migrations + sqlc queries

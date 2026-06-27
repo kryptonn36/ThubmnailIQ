@@ -161,7 +161,18 @@ export interface BillingPlan {
   api_requests_limit: number;
 }
 
-export interface SubscribeResponse {
+export interface CheckoutResponse {
+  requires_payment: boolean;
+  plan: string;
+  status?: string;
+  provider?: string;
+  order_id?: string;
+  amount?: number;
+  currency?: string;
+  key_id?: string;
+}
+
+export interface ConfirmCheckoutResponse {
   plan: string;
   status: string;
 }

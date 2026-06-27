@@ -24,13 +24,16 @@ func (h *BillingHandler) Plans(c *gin.Context) {
 	c.JSON(http.StatusOK, h.uc.Plans())
 }
 
-type subscribeRequest struct {
+type checkoutRequest struct {
 	WorkspaceID string `json:"workspace_id"`
 	Plan        string `json:"plan" binding:"required"`
 }
 
-func (h *BillingHandler) Subscribe(c *gin.Context) {
-	var req subscribeRequest
+// Checkout starts a plan change. Free plans are activated immediately; paid
+// plans return an order for the frontend to open the payment gateway's
+// checkout widget against (Razorpay today; Stripe once approved).
+func (h *BillingHandler) Checkout(c *gin.Context) {
+	var req checkoutRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -40,7 +43,48 @@ func (h *BillingHandler) Subscribe(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "could not resolve workspace_id: " + err.Error()})
 		return
 	}
-	sub, err := h.uc.Subscribe(c.Request.Context(), workspaceID, req.Plan)
+	checkout, err := h.uc.CreateCheckout(c.Request.Context(), workspaceID, req.Plan)
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+	if !checkout.RequiresPayment {
+		c.JSON(http.StatusOK, gin.H{"requires_payment": false, "plan": checkout.Plan, "status": checkout.Status})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"requires_payment": true,
+		"plan":             checkout.Plan,
+		"provider":         checkout.Order.Provider,
+		"order_id":         checkout.Order.ID,
+		"amount":           checkout.Order.AmountMinor,
+		"currency":         checkout.Order.Currency,
+		"key_id":           checkout.Order.KeyID,
+	})
+}
+
+type confirmCheckoutRequest struct {
+	WorkspaceID string `json:"workspace_id"`
+	Plan        string `json:"plan" binding:"required"`
+	OrderID     string `json:"order_id" binding:"required"`
+	PaymentID   string `json:"payment_id" binding:"required"`
+	Signature   string `json:"signature" binding:"required"`
+}
+
+// ConfirmCheckout verifies a payment the gateway's checkout widget reports as
+// successful, then activates the plan it paid for.
+func (h *BillingHandler) ConfirmCheckout(c *gin.Context) {
+	var req confirmCheckoutRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	workspaceID, err := resolveWorkspaceID(c, req.WorkspaceID, h.workspaces)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "could not resolve workspace_id: " + err.Error()})
+		return
+	}
+	sub, err := h.uc.ConfirmCheckout(c.Request.Context(), workspaceID, req.Plan, req.OrderID, req.PaymentID, req.Signature)
 	if err != nil {
 		respondError(c, err)
 		return

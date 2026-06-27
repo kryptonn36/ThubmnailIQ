@@ -109,18 +109,19 @@ type RefreshToken struct {
 }
 
 type Subscription struct {
-	ID                   uuid.UUID          `json:"id"`
-	WorkspaceID          uuid.UUID          `json:"workspace_id"`
-	StripeSubscriptionID string             `json:"stripe_subscription_id"`
-	StripePriceID        string             `json:"stripe_price_id"`
-	Plan                 string             `json:"plan"`
-	Status               string             `json:"status"`
-	CurrentPeriodStart   pgtype.Timestamptz `json:"current_period_start"`
-	CurrentPeriodEnd     pgtype.Timestamptz `json:"current_period_end"`
-	CancelAt             pgtype.Timestamptz `json:"cancel_at"`
-	CanceledAt           pgtype.Timestamptz `json:"canceled_at"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	ID                     uuid.UUID          `json:"id"`
+	WorkspaceID            uuid.UUID          `json:"workspace_id"`
+	ProviderSubscriptionID string             `json:"provider_subscription_id"`
+	ProviderPlanID         string             `json:"provider_plan_id"`
+	Plan                   string             `json:"plan"`
+	Status                 string             `json:"status"`
+	CurrentPeriodStart     pgtype.Timestamptz `json:"current_period_start"`
+	CurrentPeriodEnd       pgtype.Timestamptz `json:"current_period_end"`
+	CancelAt               pgtype.Timestamptz `json:"cancel_at"`
+	CanceledAt             pgtype.Timestamptz `json:"canceled_at"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	Provider               string             `json:"provider"`
 }
 
 type ThumbnailVersion struct {

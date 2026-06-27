@@ -13,9 +13,9 @@ SELECT * FROM api_keys WHERE key_hash = $1 AND revoked_at IS NULL;
 UPDATE api_keys SET revoked_at = NOW() WHERE id = $1 AND workspace_id = $2;
 
 -- name: UpsertSubscription :one
-INSERT INTO subscriptions (workspace_id, stripe_subscription_id, stripe_price_id, plan, status, current_period_start, current_period_end)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (stripe_subscription_id) DO UPDATE
+INSERT INTO subscriptions (workspace_id, provider, provider_subscription_id, provider_plan_id, plan, status, current_period_start, current_period_end)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (provider_subscription_id) DO UPDATE
 SET plan = EXCLUDED.plan, status = EXCLUDED.status,
     current_period_start = EXCLUDED.current_period_start,
     current_period_end = EXCLUDED.current_period_end,

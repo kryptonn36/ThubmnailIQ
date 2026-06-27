@@ -22,13 +22,14 @@ func NewBillingRepo(pool *pgxpool.Pool) *BillingRepo {
 
 func (r *BillingRepo) UpsertSubscription(ctx context.Context, s *billing.Subscription) (*billing.Subscription, error) {
 	created, err := r.q.UpsertSubscription(ctx, db.UpsertSubscriptionParams{
-		WorkspaceID:          s.WorkspaceID,
-		StripeSubscriptionID: s.StripeSubscriptionID,
-		StripePriceID:        "price_" + s.Plan,
-		Plan:                 s.Plan,
-		Status:               s.Status,
-		CurrentPeriodStart:   tsNow(s.CurrentPeriodStart),
-		CurrentPeriodEnd:     tsNow(s.CurrentPeriodEnd),
+		WorkspaceID:            s.WorkspaceID,
+		Provider:               s.Provider,
+		ProviderSubscriptionID: s.ProviderSubscriptionID,
+		ProviderPlanID:         "price_" + s.Plan,
+		Plan:                   s.Plan,
+		Status:                 s.Status,
+		CurrentPeriodStart:     tsNow(s.CurrentPeriodStart),
+		CurrentPeriodEnd:       tsNow(s.CurrentPeriodEnd),
 	})
 	if err != nil {
 		return nil, err
@@ -38,7 +39,7 @@ func (r *BillingRepo) UpsertSubscription(ctx context.Context, s *billing.Subscri
 
 func toDomainSubscription(s db.Subscription) *billing.Subscription {
 	return &billing.Subscription{
-		ID: s.ID, WorkspaceID: s.WorkspaceID, StripeSubscriptionID: s.StripeSubscriptionID,
+		ID: s.ID, WorkspaceID: s.WorkspaceID, Provider: s.Provider, ProviderSubscriptionID: s.ProviderSubscriptionID,
 		Plan: s.Plan, Status: s.Status,
 		CurrentPeriodStart: tsVal(s.CurrentPeriodStart), CurrentPeriodEnd: tsVal(s.CurrentPeriodEnd),
 	}

@@ -45,6 +45,16 @@ type Config struct {
 		APIKey string `mapstructure:"api_key"`
 	} `mapstructure:"youtube"`
 
+	Payment struct {
+		Provider string `mapstructure:"provider"`
+		Currency string `mapstructure:"currency"`
+	} `mapstructure:"payment"`
+
+	Razorpay struct {
+		KeyID     string `mapstructure:"key_id"`
+		KeySecret string `mapstructure:"key_secret"`
+	} `mapstructure:"razorpay"`
+
 	Stripe struct {
 		SecretKey string `mapstructure:"secret_key"`
 	} `mapstructure:"stripe"`
@@ -84,6 +94,8 @@ func Load() (*Config, error) {
 	v.SetDefault("s3.use_path_style", true)
 	v.SetDefault("cv_service.url", "http://localhost:8001")
 	v.SetDefault("gemini.model", "gemini-2.0-flash")
+	v.SetDefault("payment.provider", "razorpay")
+	v.SetDefault("payment.currency", "INR")
 
 	v.AutomaticEnv()
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))

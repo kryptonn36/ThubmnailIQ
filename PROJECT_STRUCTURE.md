@@ -119,8 +119,12 @@ no business logic. Two files are cross-cutting:
 - **`gemini/client.go`** — real Gemini API call if `GEMINI_API_KEY` is set, otherwise
   `heuristicCuriosity()` (keyword/number/emotion presence scoring). Any Gemini API failure also
   falls back to the heuristic rather than failing the whole analysis.
-- **`stripe/client.go`** — fully mocked; `CreateSubscription()` mints a fake ID and a 30-day
-  period. Swap for the real `stripe-go` SDK if you need actual billing.
+- **`payment/`** — billing runs against the `payment.Gateway` interface
+  (`internal/domain/payment`), not a concrete provider. `payment/razorpay/client.go` is the live
+  implementation (real Orders API + HMAC signature verification) used while Stripe access is
+  invite-gated. `payment/stripe/client.go` mints a fake order ID and always verifies — swap its
+  body for the real `stripe-go` SDK once your Stripe account is approved, then flip
+  `PAYMENT_PROVIDER=stripe`; no usecase/handler changes needed.
 
 ### `internal/middleware/`, `internal/server/`, `internal/config/`
 
@@ -208,7 +212,7 @@ services.
 - **`Makefile`** — `infra-up`/`infra-down` (docker-compose), `migrate-*` (goose),
   `sqlc-generate`, `api`/`worker`/`web` (run each service), `build`, `test`.
 - **`.env.example`** — every env var the app reads, each with an explanation of what using vs.
-  omitting it changes (real vs. mocked YouTube/Gemini/Stripe).
+  omitting it changes (real vs. mocked YouTube/Gemini; live Razorpay vs. mocked Stripe billing).
 - **`thumbnailiq_blueprint.md`** — the original full product spec this build was scoped down
   from. Useful for understanding the *intended* full-scale design (Kubernetes, Terraform, browser
   extension, real ML models, etc.) beyond what's actually implemented here.

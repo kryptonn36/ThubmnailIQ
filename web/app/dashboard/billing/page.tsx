@@ -2,7 +2,29 @@
 
 import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
-import type { BillingPlan } from "@/types";
+import type { BillingPlan, CheckoutResponse, ConfirmCheckoutResponse } from "@/types";
+
+declare global {
+  interface Window {
+    Razorpay: new (options: Record<string, unknown>) => { open: () => void };
+  }
+}
+
+const RAZORPAY_CHECKOUT_SRC = "https://checkout.razorpay.com/v1/checkout.js";
+
+function loadRazorpayScript(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (window.Razorpay) {
+      resolve();
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = RAZORPAY_CHECKOUT_SRC;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Failed to load Razorpay checkout"));
+    document.body.appendChild(script);
+  });
+}
 
 export default function BillingPage() {
   const [plans, setPlans] = useState<BillingPlan[]>([]);
@@ -37,14 +59,50 @@ export default function BillingPage() {
     setMessage(null);
     setError(null);
     try {
-      const res = await api.post<{ plan: string; status: string }>("/billing/subscribe", {
-        plan: planId,
+      const checkout = await api.post<CheckoutResponse>("/billing/checkout", { plan: planId });
+
+      if (!checkout.requires_payment) {
+        setActivePlan(checkout.plan);
+        setMessage(`Successfully subscribed to ${checkout.plan}.`);
+        setSubscribing(null);
+        return;
+      }
+
+      await loadRazorpayScript();
+      const razorpay = new window.Razorpay({
+        key: checkout.key_id,
+        amount: checkout.amount,
+        currency: checkout.currency,
+        order_id: checkout.order_id,
+        name: "ThumbnailIQ",
+        description: `${checkout.plan} plan subscription`,
+        handler: async (response: {
+          razorpay_order_id: string;
+          razorpay_payment_id: string;
+          razorpay_signature: string;
+        }) => {
+          try {
+            const confirmed = await api.post<ConfirmCheckoutResponse>("/billing/checkout/verify", {
+              plan: planId,
+              order_id: response.razorpay_order_id,
+              payment_id: response.razorpay_payment_id,
+              signature: response.razorpay_signature,
+            });
+            setActivePlan(confirmed.plan);
+            setMessage(`Successfully subscribed to ${confirmed.plan}.`);
+          } catch (err) {
+            setError(err instanceof ApiError ? err.message : "Payment succeeded but activation failed.");
+          } finally {
+            setSubscribing(null);
+          }
+        },
+        modal: {
+          ondismiss: () => setSubscribing(null),
+        },
       });
-      setActivePlan(res.plan);
-      setMessage(`Successfully subscribed to ${res.plan}.`);
+      razorpay.open();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to subscribe.");
-    } finally {
       setSubscribing(null);
     }
   }
