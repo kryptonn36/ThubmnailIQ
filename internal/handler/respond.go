@@ -9,6 +9,7 @@ import (
 )
 
 func respondError(c *gin.Context, err error) {
+	c.Error(err)
 	switch {
 	case apperrors.Is(err, apperrors.ErrNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})

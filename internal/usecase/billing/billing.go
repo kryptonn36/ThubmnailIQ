@@ -3,6 +3,7 @@ package billing
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -68,7 +69,7 @@ func (u *Usecase) CreateCheckout(ctx context.Context, workspaceID uuid.UUID, pla
 		Plan:        plan,
 		AmountMinor: int64(planDef.PriceMonthly * 100),
 		Currency:    u.currency,
-		Receipt:     fmt.Sprintf("ws_%s_%s", workspaceID, plan),
+		Receipt:     fmt.Sprintf("ws_%s_%d", strings.ReplaceAll(workspaceID.String(), "-", "")[:8], time.Now().UnixNano()),
 	})
 	if err != nil {
 		return nil, err

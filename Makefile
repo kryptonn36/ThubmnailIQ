@@ -1,6 +1,7 @@
 .PHONY: infra-up infra-down migrate-up migrate-down migrate-status sqlc-generate api worker web build test dev
 
-DATABASE_URL ?= postgres://thumbnailiq:thumbnailiq@localhost:5432/thumbnailiq?sslmode=disable
+-include .env
+export
 
 infra-up:
 	docker compose up -d postgres redis minio cv-service
@@ -21,10 +22,10 @@ sqlc-generate:
 	cd db && sqlc generate
 
 api:
-	go run ./cmd/api
+	docker compose up --build api
 
 worker:
-	go run ./cmd/worker
+	docker compose up --build worker
 
 web:
 	cd web && npm run dev

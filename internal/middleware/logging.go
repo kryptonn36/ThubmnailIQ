@@ -22,7 +22,11 @@ func RequestLogger(log zerolog.Logger) gin.HandlerFunc {
 		start := time.Now()
 		c.Next()
 
-		log.Info().
+		entry := log.Info()
+		if len(c.Errors) > 0 {
+			entry = log.Error().Err(c.Errors.Last().Err)
+		}
+		entry.
 			Str("request_id", requestID).
 			Str("method", c.Request.Method).
 			Str("path", c.Request.URL.Path).

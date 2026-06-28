@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
 
@@ -70,6 +71,11 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
+	err := godotenv.Load()
+	if err != nil {
+		return nil, fmt.Errorf("error in loading env file: %v",err)
+	}
+
 	v := viper.New()
 	v.SetConfigName("config")
 	v.SetConfigType("yaml")
@@ -93,9 +99,13 @@ func Load() (*Config, error) {
 	v.SetDefault("s3.public_base_url", "http://localhost:9000/thumbnailiq-uploads")
 	v.SetDefault("s3.use_path_style", true)
 	v.SetDefault("cv_service.url", "http://localhost:8001")
+	v.SetDefault("gemini.api", "geminiAPI")
 	v.SetDefault("gemini.model", "gemini-2.0-flash")
 	v.SetDefault("payment.provider", "razorpay")
 	v.SetDefault("payment.currency", "INR")
+	v.SetDefault("razorpay.key_id", "defaultID")
+	v.SetDefault("razorpay.key_secret", "key_secret")
+	v.SetDefault("youTube.api_key", "youtubeAPI")
 
 	v.AutomaticEnv()
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
