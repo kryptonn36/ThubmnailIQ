@@ -29,7 +29,6 @@ func toDomainAnalysis(a db.Analysis) *analysis.Analysis {
 		ProjectID:         uuidPtr(a.ProjectID),
 		UserID:            a.UserID,
 		Keyword:           a.Keyword,
-		ThumbnailURL:      a.ThumbnailUrl,
 		ThumbnailS3Key:    a.ThumbnailS3Key,
 		Status:            a.Status,
 		ErrorMessage:      textVal(a.ErrorMessage),
@@ -57,7 +56,6 @@ func (r *AnalysisRepo) Create(ctx context.Context, a *analysis.Analysis) (*analy
 		UserID:            a.UserID,
 		Keyword:           a.Keyword,
 		KeywordNormalized: a.Keyword,
-		ThumbnailUrl:      a.ThumbnailURL,
 		ThumbnailS3Key:    a.ThumbnailS3Key,
 	})
 	if err != nil {
@@ -135,7 +133,6 @@ func (r *AnalysisRepo) CreateVersion(ctx context.Context, v *analysis.ThumbnailV
 		AnalysisID:    v.AnalysisID,
 		VersionNumber: int32(v.VersionNumber),
 		S3Key:         v.S3Key,
-		ThumbnailUrl:  v.ThumbnailURL,
 		Score:         int4OrNil(v.Score),
 		CvResults:     v.CVResults,
 	})
@@ -144,7 +141,7 @@ func (r *AnalysisRepo) CreateVersion(ctx context.Context, v *analysis.ThumbnailV
 	}
 	return &analysis.ThumbnailVersion{
 		ID: created.ID, AnalysisID: created.AnalysisID, VersionNumber: int(created.VersionNumber),
-		S3Key: created.S3Key, ThumbnailURL: created.ThumbnailUrl, Score: int4Ptr(created.Score),
+		S3Key: created.S3Key, Score: int4Ptr(created.Score),
 		CVResults: created.CvResults, CreatedAt: tsVal(created.CreatedAt),
 	}, nil
 }
@@ -158,7 +155,7 @@ func (r *AnalysisRepo) ListVersions(ctx context.Context, analysisID uuid.UUID) (
 	for _, v := range rows {
 		out = append(out, &analysis.ThumbnailVersion{
 			ID: v.ID, AnalysisID: v.AnalysisID, VersionNumber: int(v.VersionNumber),
-			S3Key: v.S3Key, ThumbnailURL: v.ThumbnailUrl, Score: int4Ptr(v.Score),
+			S3Key: v.S3Key, Score: int4Ptr(v.Score),
 			CVResults: v.CvResults, CreatedAt: tsVal(v.CreatedAt),
 		})
 	}

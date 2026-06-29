@@ -16,7 +16,6 @@ type Analysis struct {
 	UserID            uuid.UUID          `json:"user_id"`
 	Keyword           string             `json:"keyword"`
 	KeywordNormalized string             `json:"keyword_normalized"`
-	ThumbnailUrl      string             `json:"thumbnail_url"`
 	ThumbnailS3Key    string             `json:"thumbnail_s3_key"`
 	Status            string             `json:"status"`
 	Score             pgtype.Int4        `json:"score"`
@@ -129,7 +128,6 @@ type ThumbnailVersion struct {
 	AnalysisID       uuid.UUID          `json:"analysis_id"`
 	VersionNumber    int32              `json:"version_number"`
 	S3Key            string             `json:"s3_key"`
-	ThumbnailUrl     string             `json:"thumbnail_url"`
 	Score            pgtype.Int4        `json:"score"`
 	CvResults        []byte             `json:"cv_results"`
 	IsSelectedWinner pgtype.Bool        `json:"is_selected_winner"`

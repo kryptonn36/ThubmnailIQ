@@ -11,6 +11,7 @@ import (
 
 	"github.com/thumbnailiq/thumbnailiq/internal/domain/analysis"
 	"github.com/thumbnailiq/thumbnailiq/internal/domain/competitor"
+	"github.com/thumbnailiq/thumbnailiq/internal/infra/cdn"
 	"github.com/thumbnailiq/thumbnailiq/internal/middleware"
 	analysisuc "github.com/thumbnailiq/thumbnailiq/internal/usecase/analysis"
 	workspaceuc "github.com/thumbnailiq/thumbnailiq/internal/usecase/workspace"
@@ -20,10 +21,22 @@ type AnalysisHandler struct {
 	uc          *analysisuc.Usecase
 	competitors competitor.Repository
 	workspaces  *workspaceuc.Usecase
+	cdn         *cdn.Builder
 }
 
-func NewAnalysisHandler(uc *analysisuc.Usecase, competitors competitor.Repository, workspaces *workspaceuc.Usecase) *AnalysisHandler {
-	return &AnalysisHandler{uc: uc, competitors: competitors, workspaces: workspaces}
+func NewAnalysisHandler(uc *analysisuc.Usecase, competitors competitor.Repository, workspaces *workspaceuc.Usecase, cdnBuilder *cdn.Builder) *AnalysisHandler {
+	return &AnalysisHandler{uc: uc, competitors: competitors, workspaces: workspaces, cdn: cdnBuilder}
+}
+
+// thumbnailURL renders the CDN URL for an object key, logging nothing and
+// falling back to an empty string on failure so one bad row can't break an
+// entire list response.
+func (h *AnalysisHandler) thumbnailURL(key string) string {
+	url, err := h.cdn.URL(key)
+	if err != nil {
+		return ""
+	}
+	return url
 }
 
 func (h *AnalysisHandler) Create(c *gin.Context) {
@@ -77,7 +90,7 @@ func (h *AnalysisHandler) Create(c *gin.Context) {
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"id": created.ID, "status": created.Status, "keyword": created.Keyword,
-		"thumbnail_url": created.ThumbnailURL, "created_at": created.CreatedAt,
+		"thumbnail_url": h.thumbnailURL(created.ThumbnailS3Key), "created_at": created.CreatedAt,
 	})
 }
 
@@ -105,7 +118,7 @@ func (h *AnalysisHandler) List(c *gin.Context) {
 	items := make([]gin.H, 0, len(result.Items))
 	for _, a := range result.Items {
 		items = append(items, gin.H{
-			"id": a.ID, "keyword": a.Keyword, "thumbnail_url": a.ThumbnailURL,
+			"id": a.ID, "keyword": a.Keyword, "thumbnail_url": h.thumbnailURL(a.ThumbnailS3Key),
 			"status": a.Status, "score": a.Score, "created_at": a.CreatedAt,
 		})
 	}
@@ -125,7 +138,7 @@ func (h *AnalysisHandler) Get(c *gin.Context) {
 	}
 
 	resp := gin.H{
-		"id": a.ID, "status": a.Status, "keyword": a.Keyword, "thumbnail_url": a.ThumbnailURL,
+		"id": a.ID, "status": a.Status, "keyword": a.Keyword, "thumbnail_url": h.thumbnailURL(a.ThumbnailS3Key),
 		"created_at": a.CreatedAt, "score": a.Score,
 		"visibility_score": a.VisibilityScore, "contrast_score": a.ContrastScore,
 		"attention_score": a.AttentionScore, "mobile_score": a.MobileScore,
@@ -153,7 +166,7 @@ func (h *AnalysisHandler) Get(c *gin.Context) {
 		versionList := make([]gin.H, 0, len(versions))
 		for _, v := range versions {
 			versionList = append(versionList, gin.H{
-				"id": v.ID, "version_number": v.VersionNumber, "thumbnail_url": v.ThumbnailURL,
+				"id": v.ID, "version_number": v.VersionNumber, "thumbnail_url": h.thumbnailURL(v.S3Key),
 				"score": v.Score, "cv_results": rawJSONOrNil(v.CVResults),
 			})
 		}
@@ -193,7 +206,7 @@ func (h *AnalysisHandler) AddCompareVersion(c *gin.Context) {
 	}
 	c.JSON(http.StatusCreated, gin.H{
 		"id": version.ID, "version_number": version.VersionNumber,
-		"thumbnail_url": version.ThumbnailURL, "score": version.Score,
+		"thumbnail_url": h.thumbnailURL(version.S3Key), "score": version.Score,
 		"cv_results": rawJSONOrNil(version.CVResults),
 	})
 }

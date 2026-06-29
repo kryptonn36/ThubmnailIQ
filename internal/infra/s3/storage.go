@@ -11,10 +11,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
+// Storage is a pure storage origin: it puts bytes into S3 and never knows
+// or cares how they're served publicly. Public URLs are the CDN layer's
+// job (see internal/infra/cdn).
 type Storage struct {
-	client        *s3.Client
-	bucket        string
-	publicBaseURL string
+	client *s3.Client
+	bucket string
 }
 
 type Config struct {
@@ -23,7 +25,6 @@ type Config struct {
 	AccessKeyID     string
 	SecretAccessKey string
 	Bucket          string
-	PublicBaseURL   string
 	UsePathStyle    bool
 }
 
@@ -43,7 +44,7 @@ func NewStorage(ctx context.Context, cfg Config) (*Storage, error) {
 		o.UsePathStyle = cfg.UsePathStyle
 	})
 
-	return &Storage{client: client, bucket: cfg.Bucket, publicBaseURL: cfg.PublicBaseURL}, nil
+	return &Storage{client: client, bucket: cfg.Bucket}, nil
 }
 
 func (s *Storage) EnsureBucket(ctx context.Context) error {
@@ -70,7 +71,10 @@ func (s *Storage) EnsurePublicReadBucket(ctx context.Context) error {
 	return err
 }
 
-func (s *Storage) Upload(ctx context.Context, key string, body []byte, contentType string) (string, error) {
+// Upload stores the object under key and returns only an error — never a
+// URL. Callers keep the key they already generated and pass it through
+// internal/infra/cdn whenever they need a public URL.
+func (s *Storage) Upload(ctx context.Context, key string, body []byte, contentType string) error {
 	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(s.bucket),
 		Key:         aws.String(key),
@@ -78,7 +82,7 @@ func (s *Storage) Upload(ctx context.Context, key string, body []byte, contentTy
 		ContentType: aws.String(contentType),
 	})
 	if err != nil {
-		return "", fmt.Errorf("s3 put object: %w", err)
+		return fmt.Errorf("s3 put object: %w", err)
 	}
-	return fmt.Sprintf("%s/%s", s.publicBaseURL, key), nil
+	return nil
 }

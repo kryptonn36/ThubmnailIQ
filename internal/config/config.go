@@ -38,9 +38,23 @@ type Config struct {
 		AccessKeyID     string `mapstructure:"access_key_id"`
 		SecretAccessKey string `mapstructure:"secret_access_key"`
 		UploadBucket    string `mapstructure:"upload_bucket"`
-		PublicBaseURL   string `mapstructure:"public_base_url"`
 		UsePathStyle    bool   `mapstructure:"use_path_style"`
+		// PublicRead controls whether the app grants the bucket a public-read
+		// policy itself. Leave true for local/MinIO dev where nothing else
+		// fronts the bucket. Set to false once a real CloudFront distribution
+		// with Origin Access Control is provisioned in front of the bucket in
+		// AWS — at that point the bucket must stay private and only
+		// CloudFront's OAC principal should be granted access (configured in
+		// AWS, not by this app).
+		PublicRead bool `mapstructure:"public_read"`
 	} `mapstructure:"s3"`
+
+	// CDN holds the public-facing domain (e.g. a CloudFront distribution)
+	// that every file URL in the app is generated against. The S3 bucket
+	// above is only ever a storage origin — see internal/infra/cdn.
+	CDN struct {
+		Domain string `mapstructure:"domain"`
+	} `mapstructure:"cdn"`
 
 	YouTube struct {
 		APIKey string `mapstructure:"api_key"`
@@ -91,13 +105,19 @@ func Load() (*Config, error) {
 	v.SetDefault("jwt.refresh_secret", "dev-refresh-secret-change-me")
 	v.SetDefault("jwt.access_ttl", "15m")
 	v.SetDefault("jwt.refresh_ttl", "168h")
-	v.SetDefault("s3.endpoint", "http://localhost:9000")
+	// No default here on purpose: an empty endpoint means "use AWS's real
+	// endpoints" (production). Viper's AutomaticEnv treats an env var set
+	// to "" identically to one that's unset, so any non-empty default here
+	// would make it impossible to ever clear S3_ENDPOINT via .env once set.
+	// Local/MinIO dev gets its endpoint from .env.example's explicit
+	// S3_ENDPOINT=http://localhost:9000, not from a code-level fallback.
 	v.SetDefault("s3.region", "us-east-1")
 	v.SetDefault("s3.access_key_id", "minioadmin")
 	v.SetDefault("s3.secret_access_key", "minioadmin")
 	v.SetDefault("s3.upload_bucket", "thumbnailiq-uploads")
-	v.SetDefault("s3.public_base_url", "http://localhost:9000/thumbnailiq-uploads")
 	v.SetDefault("s3.use_path_style", true)
+	v.SetDefault("s3.public_read", true)
+	v.SetDefault("cdn.domain", "http://localhost:9000/thumbnailiq-uploads")
 	v.SetDefault("cv_service.url", "http://localhost:8001")
 	v.SetDefault("gemini.api", "geminiAPI")
 	v.SetDefault("gemini.model", "gemini-2.0-flash")
@@ -109,6 +129,7 @@ func Load() (*Config, error) {
 
 	v.AutomaticEnv()
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	_ = v.BindEnv("cdn.domain", "CLOUDFRONT_DOMAIN")
 
 	if err := v.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {

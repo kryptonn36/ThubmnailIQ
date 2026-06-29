@@ -20,7 +20,6 @@ type Analysis struct {
 	ProjectID         *uuid.UUID
 	UserID            uuid.UUID
 	Keyword           string
-	ThumbnailURL      string
 	ThumbnailS3Key    string
 	Status            string
 	ErrorMessage      string
@@ -45,7 +44,6 @@ type ThumbnailVersion struct {
 	AnalysisID    uuid.UUID
 	VersionNumber int
 	S3Key         string
-	ThumbnailURL  string
 	Score         *int
 	CVResults     []byte
 	CreatedAt     time.Time

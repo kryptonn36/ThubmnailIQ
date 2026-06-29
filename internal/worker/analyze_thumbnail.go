@@ -10,6 +10,7 @@ import (
 
 	"github.com/thumbnailiq/thumbnailiq/internal/domain/analysis"
 	"github.com/thumbnailiq/thumbnailiq/internal/domain/competitor"
+	"github.com/thumbnailiq/thumbnailiq/internal/infra/cdn"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/cv"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/gemini"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/youtube"
@@ -21,6 +22,7 @@ const CompetitorCount = 20
 type AnalysisHandler struct {
 	analyses    analysis.Repository
 	competitors competitor.Repository
+	cdn         *cdn.Builder
 	cvClient    *cv.Client
 	youtube     youtube.Fetcher
 	gemini      *gemini.Client
@@ -31,13 +33,14 @@ type AnalysisHandler struct {
 func NewAnalysisHandler(
 	analyses analysis.Repository,
 	competitors competitor.Repository,
+	cdnBuilder *cdn.Builder,
 	cvClient *cv.Client,
 	yt youtube.Fetcher,
 	geminiClient *gemini.Client,
 	log zerolog.Logger,
 ) *AnalysisHandler {
 	return &AnalysisHandler{
-		analyses: analyses, competitors: competitors, cvClient: cvClient,
+		analyses: analyses, competitors: competitors, cdn: cdnBuilder, cvClient: cvClient,
 		youtube: yt, gemini: geminiClient, engine: scoring.NewEngine(), log: log,
 	}
 }
@@ -68,7 +71,11 @@ func (h *AnalysisHandler) HandleAnalyzeThumbnail(ctx context.Context, t *asynq.T
 }
 
 func (h *AnalysisHandler) run(ctx context.Context, a *analysis.Analysis) (*analysis.Analysis, error) {
-	ownCV, err := h.cvClient.Analyze(ctx, a.ThumbnailURL)
+	thumbnailURL, err := h.cdn.URL(a.ThumbnailS3Key)
+	if err != nil {
+		return nil, fmt.Errorf("build thumbnail url: %w", err)
+	}
+	ownCV, err := h.cvClient.Analyze(ctx, thumbnailURL)
 	if err != nil {
 		return nil, fmt.Errorf("cv analyze own thumbnail: %w", err)
 	}

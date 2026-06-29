@@ -10,6 +10,7 @@ import (
 
 	"github.com/thumbnailiq/thumbnailiq/internal/domain/analysis"
 	"github.com/thumbnailiq/thumbnailiq/internal/domain/workspace"
+	"github.com/thumbnailiq/thumbnailiq/internal/infra/cdn"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/cv"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/s3"
 	"github.com/thumbnailiq/thumbnailiq/internal/scoring"
@@ -22,14 +23,15 @@ type Usecase struct {
 	analyses   analysis.Repository
 	workspaces workspace.Repository
 	storage    *s3.Storage
+	cdn        *cdn.Builder
 	cvClient   *cv.Client
 	queue      *asynq.Client
 	engine     *scoring.Engine
 }
 
-func NewUsecase(analyses analysis.Repository, workspaces workspace.Repository, storage *s3.Storage, cvClient *cv.Client, queue *asynq.Client) *Usecase {
+func NewUsecase(analyses analysis.Repository, workspaces workspace.Repository, storage *s3.Storage, cdnBuilder *cdn.Builder, cvClient *cv.Client, queue *asynq.Client) *Usecase {
 	return &Usecase{
-		analyses: analyses, workspaces: workspaces, storage: storage,
+		analyses: analyses, workspaces: workspaces, storage: storage, cdn: cdnBuilder,
 		cvClient: cvClient, queue: queue, engine: scoring.NewEngine(),
 	}
 }
@@ -53,8 +55,7 @@ func (u *Usecase) Create(ctx context.Context, p CreateParams) (*analysis.Analysi
 	}
 
 	key := fmt.Sprintf("%s/%s/original.jpg", p.WorkspaceID, uuid.New().String())
-	thumbnailURL, err := u.storage.Upload(ctx, key, p.FileBytes, p.ContentType)
-	if err != nil {
+	if err := u.storage.Upload(ctx, key, p.FileBytes, p.ContentType); err != nil {
 		return nil, err
 	}
 
@@ -63,7 +64,6 @@ func (u *Usecase) Create(ctx context.Context, p CreateParams) (*analysis.Analysi
 		ProjectID:      p.ProjectID,
 		UserID:         p.UserID,
 		Keyword:        validator.NormalizeKeyword(p.Keyword),
-		ThumbnailURL:   thumbnailURL,
 		ThumbnailS3Key: key,
 	})
 	if err != nil {
@@ -113,11 +113,14 @@ func (u *Usecase) AddCompareVersion(ctx context.Context, analysisID uuid.UUID, f
 	}
 
 	key := fmt.Sprintf("%s/%s/version-%d.jpg", parent.WorkspaceID, analysisID, versionNum)
-	thumbnailURL, err := u.storage.Upload(ctx, key, fileBytes, contentType)
-	if err != nil {
+	if err := u.storage.Upload(ctx, key, fileBytes, contentType); err != nil {
 		return nil, err
 	}
 
+	thumbnailURL, err := u.cdn.URL(key)
+	if err != nil {
+		return nil, err
+	}
 	cvResult, err := u.cvClient.Analyze(ctx, thumbnailURL)
 	if err != nil {
 		return nil, fmt.Errorf("cv analyze: %w", err)
@@ -140,7 +143,7 @@ func (u *Usecase) AddCompareVersion(ctx context.Context, analysisID uuid.UUID, f
 	cvJSON, _ := json.Marshal(cvResult)
 	version, err := u.analyses.CreateVersion(ctx, &analysis.ThumbnailVersion{
 		AnalysisID: analysisID, VersionNumber: versionNum, S3Key: key,
-		ThumbnailURL: thumbnailURL, Score: &final, CVResults: cvJSON,
+		Score: &final, CVResults: cvJSON,
 	})
 	if err != nil {
 		return nil, err

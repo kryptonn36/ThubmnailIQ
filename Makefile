@@ -21,11 +21,11 @@ migrate-status:
 sqlc-generate:
 	cd db && sqlc generate
 
-api:
-	docker compose up --build api
+api: infra-up
+	docker compose up --build --no-deps api
 
-worker:
-	docker compose up --build worker
+worker: infra-up
+	docker compose up --build --no-deps worker
 
 web:
 	cd web && npm run dev

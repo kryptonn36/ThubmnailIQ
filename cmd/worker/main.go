@@ -7,6 +7,7 @@ import (
 	"github.com/hibiken/asynq"
 
 	"github.com/thumbnailiq/thumbnailiq/internal/config"
+	"github.com/thumbnailiq/thumbnailiq/internal/infra/cdn"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/cv"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/gemini"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/postgres"
@@ -48,7 +49,8 @@ func main() {
 	analysisRepo := postgres.NewAnalysisRepo(pool)
 	competitorRepo := postgres.NewCompetitorRepo(pool)
 
-	analysisHandler := worker.NewAnalysisHandler(analysisRepo, competitorRepo, cvClient, ytFetcher, geminiClient, log)
+	cdnBuilder := cdn.NewBuilder(cfg.CDN.Domain)
+	analysisHandler := worker.NewAnalysisHandler(analysisRepo, competitorRepo, cdnBuilder, cvClient, ytFetcher, geminiClient, log)
 
 	mux := asynq.NewServeMux()
 	mux.HandleFunc(worker.TypeAnalyzeThumbnail, analysisHandler.HandleAnalyzeThumbnail)

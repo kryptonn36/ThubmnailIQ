@@ -28,6 +28,11 @@ func respondError(c *gin.Context, err error) {
 	case apperrors.Is(err, apperrors.ErrDowngradeNotAllowed):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 	default:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		// Unrecognized errors are usually infrastructure failures (DB, S3,
+		// third-party APIs, ...) — err.Error() can contain internal details
+		// (hostnames, request IDs, vendor error text) that shouldn't reach
+		// API consumers. The real error is already logged server-side via
+		// c.Error(err) above; only a generic message goes in the response.
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 	}
 }

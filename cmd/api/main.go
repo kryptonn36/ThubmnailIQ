@@ -9,6 +9,7 @@ import (
 	"github.com/thumbnailiq/thumbnailiq/internal/config"
 	"github.com/thumbnailiq/thumbnailiq/internal/domain/payment"
 	"github.com/thumbnailiq/thumbnailiq/internal/handler"
+	"github.com/thumbnailiq/thumbnailiq/internal/infra/cdn"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/cv"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/payment/razorpay"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/payment/stripe"
@@ -43,14 +44,25 @@ func main() {
 	storage, err := s3.NewStorage(ctx, s3.Config{
 		Endpoint: cfg.S3.Endpoint, Region: cfg.S3.Region,
 		AccessKeyID: cfg.S3.AccessKeyID, SecretAccessKey: cfg.S3.SecretAccessKey,
-		Bucket: cfg.S3.UploadBucket, PublicBaseURL: cfg.S3.PublicBaseURL, UsePathStyle: cfg.S3.UsePathStyle,
+		Bucket: cfg.S3.UploadBucket, UsePathStyle: cfg.S3.UsePathStyle,
 	})
 	if err != nil {
 		log.Fatal().Err(err).Msg("configuring s3 storage")
 	}
-	if err := storage.EnsurePublicReadBucket(ctx); err != nil {
-		log.Warn().Err(err).Msg("could not ensure upload bucket exists/public (continuing)")
+	// S3_PUBLIC_READ should only be true for local/MinIO dev where nothing
+	// else fronts the bucket. In production, once a CloudFront distribution
+	// with Origin Access Control sits in front of it, set this to false —
+	// the bucket must stay private and grant access to CloudFront's OAC
+	// principal only (done in AWS, not here).
+	if cfg.S3.PublicRead {
+		if err := storage.EnsurePublicReadBucket(ctx); err != nil {
+			log.Warn().Err(err).Msg("could not ensure upload bucket exists/public (continuing)")
+		}
+	} else if err := storage.EnsureBucket(ctx); err != nil {
+		log.Warn().Err(err).Msg("could not ensure upload bucket exists (continuing)")
 	}
+
+	cdnBuilder := cdn.NewBuilder(cfg.CDN.Domain)
 
 	cvClient := cv.NewClient(cfg.CVService.URL)
 
@@ -86,7 +98,7 @@ func main() {
 
 	userUC := useruc.NewUsecase(userRepo, workspaceRepo, jwtSvc)
 	workspaceUC := workspaceuc.NewUsecase(workspaceRepo, userRepo)
-	analysisUC := analysisuc.NewUsecase(analysisRepo, workspaceRepo, storage, cvClient, queueClient)
+	analysisUC := analysisuc.NewUsecase(analysisRepo, workspaceRepo, storage, cdnBuilder, cvClient, queueClient)
 	billingUC := billinguc.NewUsecase(billingRepo, workspaceRepo, gateway, cfg.Payment.Currency)
 	trackingUC := trackinguc.NewUsecase(competitorRepo)
 	viralDBUC := viraldbuc.NewUsecase(viralDBRepo)
@@ -94,7 +106,7 @@ func main() {
 	handlers := &server.Handlers{
 		Auth:       handler.NewAuthHandler(userUC),
 		Workspace:  handler.NewWorkspaceHandler(workspaceUC),
-		Analysis:   handler.NewAnalysisHandler(analysisUC, competitorRepo, workspaceUC),
+		Analysis:   handler.NewAnalysisHandler(analysisUC, competitorRepo, workspaceUC, cdnBuilder),
 		Competitor: handler.NewCompetitorHandler(ytFetcher),
 		Tracking:   handler.NewTrackingHandler(trackingUC, workspaceUC),
 		Billing:    handler.NewBillingHandler(billingUC, workspaceUC),
