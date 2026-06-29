@@ -23,6 +23,10 @@ func respondError(c *gin.Context, err error) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid input"})
 	case apperrors.Is(err, apperrors.ErrQuotaExceeded):
 		c.JSON(http.StatusPaymentRequired, gin.H{"error": "analyses quota exceeded for this workspace's plan"})
+	case apperrors.Is(err, apperrors.ErrPlanAlreadyActive):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+	case apperrors.Is(err, apperrors.ErrDowngradeNotAllowed):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 	default:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	}

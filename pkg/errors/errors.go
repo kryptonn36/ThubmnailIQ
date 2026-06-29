@@ -10,6 +10,8 @@ var (
 	ErrInvalidInput     = errors.New("invalid input")
 	ErrRateLimited      = errors.New("rate limited")
 	ErrQuotaExceeded    = errors.New("quota exceeded")
+	ErrPlanAlreadyActive = errors.New("plan already active")
+	ErrDowngradeNotAllowed = errors.New("downgrade not allowed")
 )
 
 func Is(err, target error) bool {

@@ -48,13 +48,75 @@ type Checkout struct {
 	Order           *payment.Order
 }
 
-// CreateCheckout starts a plan change. Free plans are activated immediately;
-// paid plans get an order placed with the active payment gateway, which the
-// frontend uses to open that gateway's checkout widget.
+// activeSubscription returns the workspace's current subscription and
+// whether it's still within its paid period. A workspace with no
+// subscription row yet (never been through checkout) is treated as having
+// no active subscription, not an error.
+func (u *Usecase) activeSubscription(ctx context.Context, workspaceID uuid.UUID) (*billing.Subscription, bool, error) {
+	sub, err := u.billing.GetSubscriptionByWorkspace(ctx, workspaceID)
+	if err != nil {
+		if errors.Is(err, errors.ErrNotFound) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	return sub, sub.Status == "active" && sub.CurrentPeriodEnd.After(time.Now()), nil
+}
+
+// CurrentPlanInfo is what the frontend needs to show a workspace's current
+// plan and whether it's still valid.
+type CurrentPlanInfo struct {
+	Plan             string     `json:"plan"`
+	Status           string     `json:"status"`
+	CurrentPeriodEnd *time.Time `json:"current_period_end,omitempty"`
+	IsActive         bool       `json:"is_active"`
+}
+
+// CurrentSubscription reports the workspace's current plan. Workspaces that
+// have never been through checkout default to the free plan.
+func (u *Usecase) CurrentSubscription(ctx context.Context, workspaceID uuid.UUID) (*CurrentPlanInfo, error) {
+	sub, isActive, err := u.activeSubscription(ctx, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	if sub == nil {
+		return &CurrentPlanInfo{Plan: "free", Status: "active", IsActive: true}, nil
+	}
+	periodEnd := sub.CurrentPeriodEnd
+	return &CurrentPlanInfo{Plan: sub.Plan, Status: sub.Status, CurrentPeriodEnd: &periodEnd, IsActive: isActive}, nil
+}
+
+// CreateCheckout starts a plan change. Free plans are activated immediately
+// (only possible when there's no active paid subscription, since downgrades
+// are blocked below). Re-buying the plan a workspace is already on while
+// it's still valid is rejected. Upgrading to a pricier plan only charges the
+// difference against what's already been paid for the current period.
+// Switching to a same-or-cheaper plan is rejected outright, the same way
+// most subscription products only let you upgrade self-serve, never
+// downgrade, while a paid period is still running.
 func (u *Usecase) CreateCheckout(ctx context.Context, workspaceID uuid.UUID, plan string) (*Checkout, error) {
 	planDef := findPlan(plan)
 	if planDef == nil {
 		return nil, errors.ErrInvalidInput
+	}
+
+	current, isActive, err := u.activeSubscription(ctx, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+
+	if isActive && current.Plan == plan {
+		return nil, fmt.Errorf("you're already on the %s plan until %s: %w",
+			planDef.Name, current.CurrentPeriodEnd.Format("Jan 2, 2006"), errors.ErrPlanAlreadyActive)
+	}
+
+	var currentPlanDef *billing.Plan
+	if isActive {
+		currentPlanDef = findPlan(current.Plan)
+	}
+	if isActive && currentPlanDef != nil && planDef.PriceMonthly <= currentPlanDef.PriceMonthly {
+		return nil, fmt.Errorf("you're on the %s plan until %s; downgrades aren't available while a plan is active, only upgrades: %w",
+			currentPlanDef.Name, current.CurrentPeriodEnd.Format("Jan 2, 2006"), errors.ErrDowngradeNotAllowed)
 	}
 
 	if planDef.PriceMonthly == 0 {
@@ -65,9 +127,14 @@ func (u *Usecase) CreateCheckout(ctx context.Context, workspaceID uuid.UUID, pla
 		return &Checkout{RequiresPayment: false, Plan: sub.Plan, Status: sub.Status}, nil
 	}
 
+	amountDue := planDef.PriceMonthly
+	if currentPlanDef != nil {
+		amountDue = planDef.PriceMonthly - currentPlanDef.PriceMonthly
+	}
+
 	order, err := u.gateway.CreateOrder(ctx, payment.CreateOrderParams{
 		Plan:        plan,
-		AmountMinor: int64(planDef.PriceMonthly * 100),
+		AmountMinor: int64(amountDue * 100),
 		Currency:    u.currency,
 		Receipt:     fmt.Sprintf("ws_%s_%d", strings.ReplaceAll(workspaceID.String(), "-", "")[:8], time.Now().UnixNano()),
 	})

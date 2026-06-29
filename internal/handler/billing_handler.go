@@ -24,6 +24,22 @@ func (h *BillingHandler) Plans(c *gin.Context) {
 	c.JSON(http.StatusOK, h.uc.Plans())
 }
 
+// CurrentSubscription reports the workspace's current plan and whether it's
+// still valid, so the frontend can show it and decide what's purchasable.
+func (h *BillingHandler) CurrentSubscription(c *gin.Context) {
+	workspaceID, err := resolveWorkspaceID(c, c.Query("workspace_id"), h.workspaces)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "could not resolve workspace_id: " + err.Error()})
+		return
+	}
+	info, err := h.uc.CurrentSubscription(c.Request.Context(), workspaceID)
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, info)
+}
+
 type checkoutRequest struct {
 	WorkspaceID string `json:"workspace_id"`
 	Plan        string `json:"plan" binding:"required"`

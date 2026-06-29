@@ -176,3 +176,10 @@ export interface ConfirmCheckoutResponse {
   plan: string;
   status: string;
 }
+
+export interface CurrentSubscriptionResponse {
+  plan: string;
+  status: string;
+  current_period_end?: string;
+  is_active: boolean;
+}

@@ -2,7 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
-import type { BillingPlan, CheckoutResponse, ConfirmCheckoutResponse } from "@/types";
+import type {
+  BillingPlan,
+  CheckoutResponse,
+  ConfirmCheckoutResponse,
+  CurrentSubscriptionResponse,
+} from "@/types";
 
 declare global {
   interface Window {
@@ -28,22 +33,26 @@ function loadRazorpayScript(): Promise<void> {
 
 export default function BillingPage() {
   const [plans, setPlans] = useState<BillingPlan[]>([]);
+  const [currentSub, setCurrentSub] = useState<CurrentSubscriptionResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [subscribing, setSubscribing] = useState<string | null>(null);
-  const [activePlan, setActivePlan] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
-        const data = await api.get<BillingPlan[]>("/billing/plans");
+        const [plansData, subData] = await Promise.all([
+          api.get<BillingPlan[]>("/billing/plans"),
+          api.get<CurrentSubscriptionResponse>("/billing/subscription"),
+        ]);
         if (cancelled) return;
-        setPlans(data);
+        setPlans(plansData);
+        setCurrentSub(subData);
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof ApiError ? err.message : "Failed to load plans.");
+        setError(err instanceof ApiError ? err.message : "Failed to load billing info.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -54,6 +63,8 @@ export default function BillingPage() {
     };
   }, []);
 
+  const currentPlanDef = plans.find((p) => p.id === currentSub?.plan);
+
   async function handleSubscribe(planId: string) {
     setSubscribing(planId);
     setMessage(null);
@@ -62,8 +73,8 @@ export default function BillingPage() {
       const checkout = await api.post<CheckoutResponse>("/billing/checkout", { plan: planId });
 
       if (!checkout.requires_payment) {
-        setActivePlan(checkout.plan);
-        setMessage(`Successfully subscribed to ${checkout.plan}.`);
+        setCurrentSub({ plan: checkout.plan, status: checkout.status ?? "active", is_active: true });
+        setMessage(`Successfully switched to ${checkout.plan}.`);
         setSubscribing(null);
         return;
       }
@@ -88,7 +99,7 @@ export default function BillingPage() {
               payment_id: response.razorpay_payment_id,
               signature: response.razorpay_signature,
             });
-            setActivePlan(confirmed.plan);
+            setCurrentSub({ plan: confirmed.plan, status: confirmed.status, is_active: true });
             setMessage(`Successfully subscribed to ${confirmed.plan}.`);
           } catch (err) {
             setError(err instanceof ApiError ? err.message : "Payment succeeded but activation failed.");
@@ -116,6 +127,15 @@ export default function BillingPage() {
         </p>
       </div>
 
+      {currentSub && (
+        <p className="rounded-lg bg-surface-100 border border-surface-300 px-4 py-3 text-sm text-gray-300">
+          You&apos;re on the <span className="font-semibold text-white">{currentPlanDef?.name ?? currentSub.plan}</span> plan
+          {currentSub.is_active && currentSub.current_period_end && currentSub.plan !== "free" && (
+            <> &middot; valid until {new Date(currentSub.current_period_end).toLocaleDateString()}</>
+          )}
+        </p>
+      )}
+
       {message && (
         <p className="rounded-lg bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">
           {message}
@@ -130,12 +150,24 @@ export default function BillingPage() {
       ) : (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {plans.map((plan) => {
-            const isActive = activePlan === plan.id;
+            const isCurrent = currentSub?.is_active && currentSub.plan === plan.id;
+            const isUpgrade =
+              currentSub?.is_active &&
+              !isCurrent &&
+              currentPlanDef &&
+              plan.price_monthly > currentPlanDef.price_monthly;
+            const isDowngrade =
+              currentSub?.is_active &&
+              !isCurrent &&
+              currentPlanDef &&
+              plan.price_monthly <= currentPlanDef.price_monthly;
+            const upgradePrice = isUpgrade ? plan.price_monthly - currentPlanDef!.price_monthly : null;
+
             return (
               <div
                 key={plan.id}
                 className={`flex flex-col rounded-2xl border p-6 ${
-                  isActive
+                  isCurrent
                     ? "border-brand-500 shadow-glow"
                     : "border-surface-300 bg-surface-100"
                 }`}
@@ -154,17 +186,22 @@ export default function BillingPage() {
                 </ul>
                 <button
                   onClick={() => handleSubscribe(plan.id)}
-                  disabled={subscribing === plan.id}
+                  disabled={isCurrent || isDowngrade || subscribing === plan.id}
+                  title={isDowngrade ? "Downgrades aren't available while your current plan is active" : undefined}
                   className={`mt-6 rounded-lg px-4 py-2.5 text-sm font-semibold transition disabled:opacity-60 ${
-                    isActive
+                    isCurrent || isDowngrade
                       ? "bg-surface-300 text-gray-300"
                       : "bg-brand-gradient text-white shadow-glow hover:opacity-90"
                   }`}
                 >
                   {subscribing === plan.id
-                    ? "Subscribing..."
-                    : isActive
+                    ? "Processing..."
+                    : isCurrent
                     ? "Current Plan"
+                    : isDowngrade
+                    ? "Unavailable"
+                    : isUpgrade
+                    ? `Upgrade for $${upgradePrice}/mo`
                     : "Subscribe"}
                 </button>
               </div>

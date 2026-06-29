@@ -102,7 +102,7 @@ func Load() (*Config, error) {
 	v.SetDefault("gemini.api", "geminiAPI")
 	v.SetDefault("gemini.model", "gemini-2.0-flash")
 	v.SetDefault("payment.provider", "razorpay")
-	v.SetDefault("payment.currency", "INR")
+	v.SetDefault("payment.currency", "USD")
 	v.SetDefault("razorpay.key_id", "defaultID")
 	v.SetDefault("razorpay.key_secret", "key_secret")
 	v.SetDefault("youTube.api_key", "youtubeAPI")
