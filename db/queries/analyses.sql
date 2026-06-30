@@ -48,6 +48,12 @@ SET
 WHERE id = $1
 RETURNING *;
 
+-- name: UpdateAnalysisCTR :one
+UPDATE analyses
+SET actual_ctr = $2, published_at = $3, updated_at = NOW()
+WHERE id = $1
+RETURNING *;
+
 -- name: CreateThumbnailVersion :one
 INSERT INTO thumbnail_versions (analysis_id, version_number, s3_key, score, cv_results)
 VALUES ($1, $2, $3, $4, $5)

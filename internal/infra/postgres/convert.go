@@ -98,6 +98,21 @@ func tsNow(t time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: t, Valid: true}
 }
 
+func float8OrNil(f *float64) pgtype.Float8 {
+	if f == nil {
+		return pgtype.Float8{}
+	}
+	return pgtype.Float8{Float64: *f, Valid: true}
+}
+
+func float8Ptr(f pgtype.Float8) *float64 {
+	if !f.Valid {
+		return nil
+	}
+	v := f.Float64
+	return &v
+}
+
 func boolOrNil(b *bool) pgtype.Bool {
 	if b == nil {
 		return pgtype.Bool{}

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -46,7 +47,9 @@ func toDomainAnalysis(a db.Analysis) *analysis.Analysis {
 		RankInCompetitors: int4Ptr(a.RankInCompetitors),
 		RelevanceScore:     int4Ptr(a.RelevanceScore),
 		RelevanceReasoning: textVal(a.RelevanceReasoning),
-		CreatedAt:         tsVal(a.CreatedAt),
+		ActualCTR:          float8Ptr(a.ActualCtr),
+		PublishedAt:        tsPtr(a.PublishedAt),
+		CreatedAt:          tsVal(a.CreatedAt),
 		UpdatedAt:         tsVal(a.UpdatedAt),
 	}
 }
@@ -169,4 +172,13 @@ func (r *AnalysisRepo) ListVersions(ctx context.Context, analysisID uuid.UUID) (
 func (r *AnalysisRepo) NextVersionNumber(ctx context.Context, analysisID uuid.UUID) (int, error) {
 	n, err := r.q.NextThumbnailVersionNumber(ctx, analysisID)
 	return int(n), err
+}
+
+func (r *AnalysisRepo) UpdateCTR(ctx context.Context, id uuid.UUID, ctr float64, publishedAt time.Time) error {
+	_, err := r.q.UpdateAnalysisCTR(ctx, db.UpdateAnalysisCTRParams{
+		ID:          id,
+		ActualCtr:   float8OrNil(&ctr),
+		PublishedAt: tsNow(publishedAt),
+	})
+	return err
 }

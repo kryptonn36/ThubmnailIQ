@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
@@ -149,4 +150,8 @@ func (u *Usecase) AddCompareVersion(ctx context.Context, analysisID uuid.UUID, f
 		return nil, err
 	}
 	return version, nil
+}
+
+func (u *Usecase) UpdateCTR(ctx context.Context, id uuid.UUID, ctr float64, publishedAt time.Time) error {
+	return u.analyses.UpdateCTR(ctx, id, ctr, publishedAt)
 }

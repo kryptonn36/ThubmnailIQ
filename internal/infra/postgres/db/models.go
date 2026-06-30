@@ -37,6 +37,8 @@ type Analysis struct {
 	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
 	RelevanceScore     pgtype.Int4        `json:"relevance_score"`
 	RelevanceReasoning pgtype.Text        `json:"relevance_reasoning"`
+	ActualCtr          pgtype.Float8      `json:"actual_ctr"`
+	PublishedAt        pgtype.Timestamptz `json:"published_at"`
 }
 
 type ApiKey struct {
@@ -198,6 +200,9 @@ type Workspace struct {
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
+	BrandPrimaryColor    pgtype.Text        `json:"brand_primary_color"`
+	BrandSecondaryColor  pgtype.Text        `json:"brand_secondary_color"`
+	BrandFont            pgtype.Text        `json:"brand_font"`
 }
 
 type WorkspaceMember struct {

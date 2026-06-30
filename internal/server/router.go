@@ -6,22 +6,24 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
 
+	"github.com/thumbnailiq/thumbnailiq/internal/domain/billing"
 	"github.com/thumbnailiq/thumbnailiq/internal/handler"
 	"github.com/thumbnailiq/thumbnailiq/internal/middleware"
 	"github.com/thumbnailiq/thumbnailiq/pkg/jwt"
 )
 
 type Handlers struct {
-	Auth       *handler.AuthHandler
-	Workspace  *handler.WorkspaceHandler
-	Analysis   *handler.AnalysisHandler
-	Competitor *handler.CompetitorHandler
-	Tracking   *handler.TrackingHandler
-	Billing    *handler.BillingHandler
-	ViralDB    *handler.ViralDBHandler
+	Auth         *handler.AuthHandler
+	Workspace    *handler.WorkspaceHandler
+	Analysis     *handler.AnalysisHandler
+	Competitor   *handler.CompetitorHandler
+	Tracking     *handler.TrackingHandler
+	Billing      *handler.BillingHandler
+	ViralDB      *handler.ViralDBHandler
+	QuickAnalyze *handler.QuickAnalyzeHandler
 }
 
-func NewRouter(h *Handlers, jwtSvc *jwt.Service, log zerolog.Logger) *gin.Engine {
+func NewRouter(h *Handlers, jwtSvc *jwt.Service, billingRepo billing.Repository, log zerolog.Logger) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery(), middleware.RequestLogger(log), middleware.CORS())
 
@@ -39,6 +41,7 @@ func NewRouter(h *Handlers, jwtSvc *jwt.Service, log zerolog.Logger) *gin.Engine
 
 	authed.POST("/workspaces", h.Workspace.Create)
 	authed.GET("/workspaces", h.Workspace.List)
+	authed.PATCH("/workspaces/:id/brand", h.Workspace.UpdateBrand)
 	authed.GET("/workspaces/:id/members", h.Workspace.ListMembers)
 	authed.POST("/workspaces/:id/members", h.Workspace.InviteMember)
 
@@ -46,8 +49,10 @@ func NewRouter(h *Handlers, jwtSvc *jwt.Service, log zerolog.Logger) *gin.Engine
 	authed.GET("/analyses", h.Analysis.List)
 	authed.GET("/analyses/:id", h.Analysis.Get)
 	authed.POST("/analyses/:id/compare", h.Analysis.AddCompareVersion)
+	authed.PATCH("/analyses/:id/ctr", h.Analysis.UpdateCTR)
 
 	authed.GET("/keywords/:keyword/competitors", h.Competitor.ListForKeyword)
+	authed.GET("/keywords/:keyword/ideas", h.Competitor.VideoIdeas)
 
 	authed.POST("/tracking", h.Tracking.Create)
 	authed.GET("/tracking", h.Tracking.List)
@@ -61,6 +66,12 @@ func NewRouter(h *Handlers, jwtSvc *jwt.Service, log zerolog.Logger) *gin.Engine
 	authed.DELETE("/api-keys/:id", h.Billing.RevokeAPIKey)
 
 	authed.GET("/viral-db", h.ViralDB.Search)
+
+	// API-key-authenticated routes — used by the browser extension and
+	// any other non-browser API consumer that holds a ThumbnailIQ API key.
+	apiKeyed := v1.Group("/public")
+	apiKeyed.Use(middleware.APIKeyAuth(billingRepo))
+	apiKeyed.POST("/quick-analyze", h.QuickAnalyze.Analyze)
 
 	return r
 }

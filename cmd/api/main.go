@@ -11,6 +11,7 @@ import (
 	"github.com/thumbnailiq/thumbnailiq/internal/handler"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/cdn"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/cv"
+	"github.com/thumbnailiq/thumbnailiq/internal/infra/gemini"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/payment/razorpay"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/payment/stripe"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/postgres"
@@ -75,6 +76,8 @@ func main() {
 		log.Info().Msg("YOUTUBE_API_KEY not set, using synthetic competitor data")
 	}
 
+	geminiClient := gemini.NewClient(cfg.Gemini.APIKey, cfg.Gemini.Model)
+
 	var gateway payment.Gateway
 	switch cfg.Payment.Provider {
 	case "stripe":
@@ -104,16 +107,17 @@ func main() {
 	viralDBUC := viraldbuc.NewUsecase(viralDBRepo)
 
 	handlers := &server.Handlers{
-		Auth:       handler.NewAuthHandler(userUC),
-		Workspace:  handler.NewWorkspaceHandler(workspaceUC),
-		Analysis:   handler.NewAnalysisHandler(analysisUC, competitorRepo, workspaceUC, cdnBuilder),
-		Competitor: handler.NewCompetitorHandler(ytFetcher),
-		Tracking:   handler.NewTrackingHandler(trackingUC, workspaceUC),
-		Billing:    handler.NewBillingHandler(billingUC, workspaceUC),
-		ViralDB:    handler.NewViralDBHandler(viralDBUC),
+		Auth:         handler.NewAuthHandler(userUC),
+		Workspace:    handler.NewWorkspaceHandler(workspaceUC),
+		Analysis:     handler.NewAnalysisHandler(analysisUC, competitorRepo, workspaceUC, cdnBuilder),
+		Competitor:   handler.NewCompetitorHandler(ytFetcher, geminiClient),
+		Tracking:     handler.NewTrackingHandler(trackingUC, workspaceUC),
+		Billing:      handler.NewBillingHandler(billingUC, workspaceUC),
+		ViralDB:      handler.NewViralDBHandler(viralDBUC),
+		QuickAnalyze: handler.NewQuickAnalyzeHandler(cvClient),
 	}
 
-	router := server.NewRouter(handlers, jwtSvc, log)
+	router := server.NewRouter(handlers, jwtSvc, billingRepo, log)
 
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	log.Info().Str("addr", addr).Msg("starting ThumbnailIQ API server")

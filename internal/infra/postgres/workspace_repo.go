@@ -22,14 +22,17 @@ func NewWorkspaceRepo(pool *pgxpool.Pool) *WorkspaceRepo {
 
 func toDomainWorkspace(w db.Workspace) *workspace.Workspace {
 	return &workspace.Workspace{
-		ID:                w.ID,
-		Name:              w.Name,
-		Slug:              w.Slug,
-		Plan:              w.Plan,
-		OwnerID:           w.OwnerID,
-		AnalysesThisMonth: int(w.AnalysesThisMonth),
-		AnalysesLimit:     int(w.AnalysesLimit),
-		CreatedAt:         tsVal(w.CreatedAt),
+		ID:                  w.ID,
+		Name:                w.Name,
+		Slug:                w.Slug,
+		Plan:                w.Plan,
+		OwnerID:             w.OwnerID,
+		AnalysesThisMonth:   int(w.AnalysesThisMonth),
+		AnalysesLimit:       int(w.AnalysesLimit),
+		BrandPrimaryColor:   textVal(w.BrandPrimaryColor),
+		BrandSecondaryColor: textVal(w.BrandSecondaryColor),
+		BrandFont:           textVal(w.BrandFont),
+		CreatedAt:           tsVal(w.CreatedAt),
 	}
 }
 
@@ -93,6 +96,16 @@ func (r *WorkspaceRepo) IncrementAnalysesUsage(ctx context.Context, workspaceID 
 
 func (r *WorkspaceRepo) UpdatePlan(ctx context.Context, workspaceID uuid.UUID, plan string, analysesLimit int) (*workspace.Workspace, error) {
 	w, err := r.q.UpdateWorkspacePlan(ctx, db.UpdateWorkspacePlanParams{ID: workspaceID, Plan: plan, AnalysesLimit: int32(analysesLimit)})
+	if err != nil {
+		return nil, err
+	}
+	return toDomainWorkspace(w), nil
+}
+
+func (r *WorkspaceRepo) UpdateBrand(ctx context.Context, workspaceID uuid.UUID, primary, secondary, font string) (*workspace.Workspace, error) {
+	w, err := r.q.UpdateWorkspaceBrand(ctx, db.UpdateWorkspaceBrandParams{
+		ID: workspaceID, BrandPrimaryColor: textOrNil(primary), BrandSecondaryColor: textOrNil(secondary), BrandFont: textOrNil(font),
+	})
 	if err != nil {
 		return nil, err
 	}

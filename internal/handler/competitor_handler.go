@@ -6,15 +6,17 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/thumbnailiq/thumbnailiq/internal/infra/gemini"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/youtube"
 )
 
 type CompetitorHandler struct {
 	fetcher youtube.Fetcher
+	gemini  *gemini.Client
 }
 
-func NewCompetitorHandler(fetcher youtube.Fetcher) *CompetitorHandler {
-	return &CompetitorHandler{fetcher: fetcher}
+func NewCompetitorHandler(fetcher youtube.Fetcher, geminiClient *gemini.Client) *CompetitorHandler {
+	return &CompetitorHandler{fetcher: fetcher, gemini: geminiClient}
 }
 
 func (h *CompetitorHandler) ListForKeyword(c *gin.Context) {
@@ -39,4 +41,37 @@ func (h *CompetitorHandler) ListForKeyword(c *gin.Context) {
 		out = append(out, item)
 	}
 	c.JSON(http.StatusOK, gin.H{"competitors": out})
+}
+
+// VideoIdeas generates fresh video ideas for a keyword by studying what
+// top-performing competitors are already doing and either asking Gemini to
+// suggest differentiated angles, or falling back to a template-based
+// heuristic when Gemini is unavailable.
+func (h *CompetitorHandler) VideoIdeas(c *gin.Context) {
+	keyword := c.Param("keyword")
+	if keyword == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "keyword is required"})
+		return
+	}
+
+	count := 15
+	results, err := h.fetcher.FetchCompetitors(c.Request.Context(), keyword, count)
+	if err != nil {
+		results = nil
+	}
+
+	titles := make([]string, 0, len(results))
+	for _, r := range results {
+		titles = append(titles, r.Title)
+	}
+
+	ideas, err := h.gemini.GenerateVideoIdeas(c.Request.Context(), keyword, titles)
+	if err != nil || ideas == nil {
+		if err != nil {
+			c.Error(err)
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+	c.JSON(http.StatusOK, ideas)
 }

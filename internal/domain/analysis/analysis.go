@@ -37,6 +37,8 @@ type Analysis struct {
 	RankInCompetitors *int
 	RelevanceScore    *int
 	RelevanceReasoning string
+	ActualCTR          *float64
+	PublishedAt        *time.Time
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 }
@@ -71,6 +73,7 @@ type Repository interface {
 	List(ctx context.Context, f ListFilter) (*ListResult, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status, errMsg string) error
 	UpdateResults(ctx context.Context, a *Analysis) error
+	UpdateCTR(ctx context.Context, id uuid.UUID, ctr float64, publishedAt time.Time) error
 	CreateVersion(ctx context.Context, v *ThumbnailVersion) (*ThumbnailVersion, error)
 	ListVersions(ctx context.Context, analysisID uuid.UUID) ([]*ThumbnailVersion, error)
 	NextVersionNumber(ctx context.Context, analysisID uuid.UUID) (int, error)

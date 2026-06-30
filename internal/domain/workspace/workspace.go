@@ -8,14 +8,17 @@ import (
 )
 
 type Workspace struct {
-	ID                uuid.UUID `json:"id"`
-	Name              string    `json:"name"`
-	Slug              string    `json:"slug"`
-	Plan              string    `json:"plan"`
-	OwnerID           uuid.UUID `json:"owner_id"`
-	AnalysesThisMonth int       `json:"analyses_this_month"`
-	AnalysesLimit     int       `json:"analyses_limit"`
-	CreatedAt         time.Time `json:"created_at"`
+	ID                  uuid.UUID `json:"id"`
+	Name                string    `json:"name"`
+	Slug                string    `json:"slug"`
+	Plan                string    `json:"plan"`
+	OwnerID             uuid.UUID `json:"owner_id"`
+	AnalysesThisMonth   int       `json:"analyses_this_month"`
+	AnalysesLimit       int       `json:"analyses_limit"`
+	BrandPrimaryColor   string    `json:"brand_primary_color"`
+	BrandSecondaryColor string    `json:"brand_secondary_color"`
+	BrandFont           string    `json:"brand_font"`
+	CreatedAt           time.Time `json:"created_at"`
 }
 
 type Member struct {
@@ -35,4 +38,5 @@ type Repository interface {
 	ListMembers(ctx context.Context, workspaceID uuid.UUID) ([]*Member, error)
 	IncrementAnalysesUsage(ctx context.Context, workspaceID uuid.UUID) error
 	UpdatePlan(ctx context.Context, workspaceID uuid.UUID, plan string, analysesLimit int) (*Workspace, error)
+	UpdateBrand(ctx context.Context, workspaceID uuid.UUID, primary, secondary, font string) (*Workspace, error)
 }

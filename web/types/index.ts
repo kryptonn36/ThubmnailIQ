@@ -21,6 +21,9 @@ export interface Workspace {
   plan: string;
   analyses_this_month: number;
   analyses_limit: number;
+  brand_primary_color: string;
+  brand_secondary_color: string;
+  brand_font: string;
 }
 
 export type AnalysisStatus = "pending" | "processing" | "complete" | "failed";
@@ -53,10 +56,12 @@ export interface CVResults {
     text_strings: string[];
     text_density_pct: number;
     word_count: number;
+    avg_text_height_pct: number;
   };
   face: {
     face_count: number;
     primary_emotion: string | null;
+    has_eye_contact: boolean;
   };
   colors: {
     dominant_colors: DominantColor[];
@@ -127,6 +132,8 @@ export interface AnalysisFull {
   rank_in_competitors: number | null;
   relevance_score: number | null;
   relevance_reasoning: string;
+  actual_ctr: number | null;
+  published_at: string | null;
   competitors: Competitor[];
   versions?: ThumbnailVersion[];
 }
@@ -192,4 +199,20 @@ export interface CurrentSubscriptionResponse {
   status: string;
   current_period_end?: string;
   is_active: boolean;
+}
+
+export interface APIKey {
+  id: string;
+  name: string;
+  key_prefix: string;
+  requests_this_month: number;
+  requests_limit: number;
+  created_at: string;
+}
+
+export interface CreatedAPIKey {
+  id: string;
+  name: string;
+  key_prefix: string;
+  key: string; // raw key — only present immediately after creation
 }

@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -145,6 +146,7 @@ func (h *AnalysisHandler) Get(c *gin.Context) {
 		"branding_score": a.BrandingScore, "curiosity_score": a.CuriosityScore,
 		"competitor_count": a.CompetitorCount, "rank_in_competitors": a.RankInCompetitors,
 		"relevance_score": a.RelevanceScore, "relevance_reasoning": a.RelevanceReasoning,
+		"actual_ctr": a.ActualCTR, "published_at": a.PublishedAt,
 		"error_message": a.ErrorMessage,
 	}
 	resp["cv_results"] = rawJSONOrNil(a.CVResults)
@@ -210,6 +212,35 @@ func (h *AnalysisHandler) AddCompareVersion(c *gin.Context) {
 		"thumbnail_url": h.thumbnailURL(version.S3Key), "score": version.Score,
 		"cv_results": rawJSONOrNil(version.CVResults),
 	})
+}
+
+type updateCTRRequest struct {
+	ActualCTR   float64 `json:"actual_ctr" binding:"required,min=0,max=100"`
+	PublishedAt string  `json:"published_at"`
+}
+
+func (h *AnalysisHandler) UpdateCTR(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid analysis id"})
+		return
+	}
+	var req updateCTRRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	publishedAt := time.Now()
+	if req.PublishedAt != "" {
+		if t, err := time.Parse(time.RFC3339, req.PublishedAt); err == nil {
+			publishedAt = t
+		}
+	}
+	if err := h.uc.UpdateCTR(c.Request.Context(), id, req.ActualCTR, publishedAt); err != nil {
+		respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"actual_ctr": req.ActualCTR, "published_at": publishedAt})
 }
 
 func rawJSONOrNil(b []byte) json.RawMessage {

@@ -40,7 +40,7 @@ func (q *Queries) AddWorkspaceMember(ctx context.Context, arg AddWorkspaceMember
 const createWorkspace = `-- name: CreateWorkspace :one
 INSERT INTO workspaces (name, slug, owner_id)
 VALUES ($1, $2, $3)
-RETURNING id, name, slug, logo_url, plan, owner_id, analyses_this_month, analyses_limit, api_requests_this_month, api_requests_limit, created_at, updated_at, deleted_at
+RETURNING id, name, slug, logo_url, plan, owner_id, analyses_this_month, analyses_limit, api_requests_this_month, api_requests_limit, created_at, updated_at, deleted_at, brand_primary_color, brand_secondary_color, brand_font
 `
 
 type CreateWorkspaceParams struct {
@@ -66,12 +66,15 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.BrandPrimaryColor,
+		&i.BrandSecondaryColor,
+		&i.BrandFont,
 	)
 	return i, err
 }
 
 const getWorkspaceByID = `-- name: GetWorkspaceByID :one
-SELECT id, name, slug, logo_url, plan, owner_id, analyses_this_month, analyses_limit, api_requests_this_month, api_requests_limit, created_at, updated_at, deleted_at FROM workspaces WHERE id = $1 AND deleted_at IS NULL
+SELECT id, name, slug, logo_url, plan, owner_id, analyses_this_month, analyses_limit, api_requests_this_month, api_requests_limit, created_at, updated_at, deleted_at, brand_primary_color, brand_secondary_color, brand_font FROM workspaces WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetWorkspaceByID(ctx context.Context, id uuid.UUID) (Workspace, error) {
@@ -91,6 +94,9 @@ func (q *Queries) GetWorkspaceByID(ctx context.Context, id uuid.UUID) (Workspace
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.BrandPrimaryColor,
+		&i.BrandSecondaryColor,
+		&i.BrandFont,
 	)
 	return i, err
 }
@@ -151,7 +157,7 @@ func (q *Queries) ListWorkspaceMembers(ctx context.Context, workspaceID uuid.UUI
 }
 
 const listWorkspacesForUser = `-- name: ListWorkspacesForUser :many
-SELECT w.id, w.name, w.slug, w.logo_url, w.plan, w.owner_id, w.analyses_this_month, w.analyses_limit, w.api_requests_this_month, w.api_requests_limit, w.created_at, w.updated_at, w.deleted_at FROM workspaces w
+SELECT w.id, w.name, w.slug, w.logo_url, w.plan, w.owner_id, w.analyses_this_month, w.analyses_limit, w.api_requests_this_month, w.api_requests_limit, w.created_at, w.updated_at, w.deleted_at, w.brand_primary_color, w.brand_secondary_color, w.brand_font FROM workspaces w
 JOIN workspace_members wm ON wm.workspace_id = w.id
 WHERE wm.user_id = $1 AND w.deleted_at IS NULL
 ORDER BY w.created_at DESC
@@ -180,6 +186,9 @@ func (q *Queries) ListWorkspacesForUser(ctx context.Context, userID uuid.UUID) (
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.BrandPrimaryColor,
+			&i.BrandSecondaryColor,
+			&i.BrandFont,
 		); err != nil {
 			return nil, err
 		}
@@ -191,10 +200,53 @@ func (q *Queries) ListWorkspacesForUser(ctx context.Context, userID uuid.UUID) (
 	return items, nil
 }
 
+const updateWorkspaceBrand = `-- name: UpdateWorkspaceBrand :one
+UPDATE workspaces
+SET brand_primary_color = $2, brand_secondary_color = $3, brand_font = $4, updated_at = NOW()
+WHERE id = $1
+RETURNING id, name, slug, logo_url, plan, owner_id, analyses_this_month, analyses_limit, api_requests_this_month, api_requests_limit, created_at, updated_at, deleted_at, brand_primary_color, brand_secondary_color, brand_font
+`
+
+type UpdateWorkspaceBrandParams struct {
+	ID                  uuid.UUID   `json:"id"`
+	BrandPrimaryColor   pgtype.Text `json:"brand_primary_color"`
+	BrandSecondaryColor pgtype.Text `json:"brand_secondary_color"`
+	BrandFont           pgtype.Text `json:"brand_font"`
+}
+
+func (q *Queries) UpdateWorkspaceBrand(ctx context.Context, arg UpdateWorkspaceBrandParams) (Workspace, error) {
+	row := q.db.QueryRow(ctx, updateWorkspaceBrand,
+		arg.ID,
+		arg.BrandPrimaryColor,
+		arg.BrandSecondaryColor,
+		arg.BrandFont,
+	)
+	var i Workspace
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.LogoUrl,
+		&i.Plan,
+		&i.OwnerID,
+		&i.AnalysesThisMonth,
+		&i.AnalysesLimit,
+		&i.ApiRequestsThisMonth,
+		&i.ApiRequestsLimit,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.BrandPrimaryColor,
+		&i.BrandSecondaryColor,
+		&i.BrandFont,
+	)
+	return i, err
+}
+
 const updateWorkspacePlan = `-- name: UpdateWorkspacePlan :one
 UPDATE workspaces SET plan = $2, analyses_limit = $3, updated_at = NOW()
 WHERE id = $1
-RETURNING id, name, slug, logo_url, plan, owner_id, analyses_this_month, analyses_limit, api_requests_this_month, api_requests_limit, created_at, updated_at, deleted_at
+RETURNING id, name, slug, logo_url, plan, owner_id, analyses_this_month, analyses_limit, api_requests_this_month, api_requests_limit, created_at, updated_at, deleted_at, brand_primary_color, brand_secondary_color, brand_font
 `
 
 type UpdateWorkspacePlanParams struct {
@@ -220,6 +272,9 @@ func (q *Queries) UpdateWorkspacePlan(ctx context.Context, arg UpdateWorkspacePl
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.BrandPrimaryColor,
+		&i.BrandSecondaryColor,
+		&i.BrandFont,
 	)
 	return i, err
 }

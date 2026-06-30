@@ -44,8 +44,10 @@ type Querier interface {
 	RevokeApiKey(ctx context.Context, arg RevokeApiKeyParams) error
 	RevokeRefreshToken(ctx context.Context, tokenHash string) error
 	SearchViralThumbnails(ctx context.Context, arg SearchViralThumbnailsParams) ([]ViralThumbnail, error)
+	UpdateAnalysisCTR(ctx context.Context, arg UpdateAnalysisCTRParams) (Analysis, error)
 	UpdateAnalysisResults(ctx context.Context, arg UpdateAnalysisResultsParams) (Analysis, error)
 	UpdateAnalysisStatus(ctx context.Context, arg UpdateAnalysisStatusParams) (Analysis, error)
+	UpdateWorkspaceBrand(ctx context.Context, arg UpdateWorkspaceBrandParams) (Workspace, error)
 	UpdateWorkspacePlan(ctx context.Context, arg UpdateWorkspacePlanParams) (Workspace, error)
 	UpsertSubscription(ctx context.Context, arg UpsertSubscriptionParams) (Subscription, error)
 	UpsertViralThumbnail(ctx context.Context, arg UpsertViralThumbnailParams) (ViralThumbnail, error)

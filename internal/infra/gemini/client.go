@@ -98,6 +98,103 @@ Return ONLY valid JSON: {"curiosity_score": <0-100>, "reasoning": "<2 sentence e
 	return &result, nil
 }
 
+type VideoIdea struct {
+	Title       string `json:"title"`
+	Hook        string `json:"hook"`
+	Format      string `json:"format"`
+	CTRPotential string `json:"ctr_potential"`
+}
+
+type VideoIdeasResult struct {
+	Ideas []VideoIdea `json:"ideas"`
+}
+
+// GenerateVideoIdeas suggests fresh video ideas for a keyword by studying
+// what titles and formats are already working for the top-ranking competitors.
+// Falls back to a rule-based template generator when Gemini isn't available.
+func (c *Client) GenerateVideoIdeas(ctx context.Context, keyword string, competitorTitles []string) (*VideoIdeasResult, error) {
+	if c.apiKey == "" || len(competitorTitles) == 0 {
+		return heuristicIdeas(keyword, competitorTitles), nil
+	}
+
+	titlesStr := ""
+	for i, t := range competitorTitles {
+		if i >= 15 {
+			break
+		}
+		titlesStr += fmt.Sprintf("- %s\n", t)
+	}
+
+	prompt := fmt.Sprintf(`You are a top YouTube content strategist. A creator wants to make a video about %q.
+
+Here are the top-performing competitor titles in this niche:
+%s
+
+Generate exactly 6 fresh, original video ideas that would compete well against these. Each idea must:
+- Have a distinct format (e.g. listicle, how-to, story, challenge, comparison, case study)
+- Use a proven click-trigger (curiosity gap, number, emotion, controversy, FOMO, transformation)
+- Be genuinely different from the competitors above
+
+Return ONLY valid JSON:
+{"ideas": [
+  {"title": "<catchy title>", "hook": "<1-sentence hook explaining why viewers click>", "format": "<Listicle|How-To|Story|Challenge|Comparison|Case Study|Reaction>", "ctr_potential": "<Low|Medium|High|Very High>"},
+  ...
+]}`, keyword, titlesStr)
+
+	reqBody, _ := json.Marshal(map[string]any{
+		"contents": []map[string]any{
+			{"parts": []map[string]string{{"text": prompt}}},
+		},
+		"generationConfig": map[string]any{"maxOutputTokens": 1200},
+	})
+
+	endpoint := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", c.model, url.QueryEscape(c.apiKey))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(reqBody))
+	if err != nil {
+		return heuristicIdeas(keyword, competitorTitles), nil
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return heuristicIdeas(keyword, competitorTitles), nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return heuristicIdeas(keyword, competitorTitles), nil
+	}
+
+	var apiResp struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct{ Text string `json:"text"` } `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil || len(apiResp.Candidates) == 0 || len(apiResp.Candidates[0].Content.Parts) == 0 {
+		return heuristicIdeas(keyword, competitorTitles), nil
+	}
+	text := stripJSONFence(apiResp.Candidates[0].Content.Parts[0].Text)
+	var result VideoIdeasResult
+	if err := json.Unmarshal([]byte(text), &result); err != nil || len(result.Ideas) == 0 {
+		return heuristicIdeas(keyword, competitorTitles), nil
+	}
+	return &result, nil
+}
+
+func heuristicIdeas(keyword string, _ []string) *VideoIdeasResult {
+	kw := keyword
+	templates := []VideoIdea{
+		{Title: fmt.Sprintf("I Tried %s For 30 Days — Here's What Happened", strings.Title(kw)), Hook: "Transformation story triggers curiosity about the result", Format: "Story", CTRPotential: "High"},
+		{Title: fmt.Sprintf("7 %s Mistakes Everyone Makes (And How To Fix Them)", strings.Title(kw)), Hook: "Listicle + fear of being wrong makes viewers click to self-check", Format: "Listicle", CTRPotential: "Very High"},
+		{Title: fmt.Sprintf("The Truth About %s Nobody Talks About", strings.Title(kw)), Hook: "Curiosity gap — implies hidden or suppressed information", Format: "Story", CTRPotential: "High"},
+		{Title: fmt.Sprintf("How To %s Even If You're a Complete Beginner", strings.Title(kw)), Hook: "Low barrier framing attracts the largest possible audience", Format: "How-To", CTRPotential: "Very High"},
+		{Title: fmt.Sprintf("%s vs %s: I Tested Both For 60 Days", strings.Title(kw), strings.Title(kw)+" Pro"), Hook: "Comparison + personal test beats generic reviews for CTR", Format: "Comparison", CTRPotential: "High"},
+		{Title: fmt.Sprintf("Why I Quit %s (And What I Do Instead)", strings.Title(kw)), Hook: "Contrarian hook builds curiosity and emotional investment", Format: "Story", CTRPotential: "Very High"},
+	}
+	return &VideoIdeasResult{Ideas: templates}
+}
+
 type RelevanceResult struct {
 	Score     int    `json:"relevance_score"`
 	Reasoning string `json:"reasoning"`

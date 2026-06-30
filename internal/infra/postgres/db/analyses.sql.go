@@ -35,7 +35,7 @@ INSERT INTO analyses (
     workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status
 ) VALUES (
     $1, $2, $3, $4, $5, $6, 'pending'
-) RETURNING id, workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status, score, visibility_score, contrast_score, attention_score, mobile_score, branding_score, curiosity_score, cv_results, competitor_avg, suggestions, competitor_count, rank_in_competitors, error_message, retry_count, created_at, updated_at, deleted_at, relevance_score, relevance_reasoning
+) RETURNING id, workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status, score, visibility_score, contrast_score, attention_score, mobile_score, branding_score, curiosity_score, cv_results, competitor_avg, suggestions, competitor_count, rank_in_competitors, error_message, retry_count, created_at, updated_at, deleted_at, relevance_score, relevance_reasoning, actual_ctr, published_at
 `
 
 type CreateAnalysisParams struct {
@@ -85,6 +85,8 @@ func (q *Queries) CreateAnalysis(ctx context.Context, arg CreateAnalysisParams) 
 		&i.DeletedAt,
 		&i.RelevanceScore,
 		&i.RelevanceReasoning,
+		&i.ActualCtr,
+		&i.PublishedAt,
 	)
 	return i, err
 }
@@ -126,7 +128,7 @@ func (q *Queries) CreateThumbnailVersion(ctx context.Context, arg CreateThumbnai
 }
 
 const getAnalysisByID = `-- name: GetAnalysisByID :one
-SELECT id, workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status, score, visibility_score, contrast_score, attention_score, mobile_score, branding_score, curiosity_score, cv_results, competitor_avg, suggestions, competitor_count, rank_in_competitors, error_message, retry_count, created_at, updated_at, deleted_at, relevance_score, relevance_reasoning FROM analyses WHERE id = $1 AND deleted_at IS NULL
+SELECT id, workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status, score, visibility_score, contrast_score, attention_score, mobile_score, branding_score, curiosity_score, cv_results, competitor_avg, suggestions, competitor_count, rank_in_competitors, error_message, retry_count, created_at, updated_at, deleted_at, relevance_score, relevance_reasoning, actual_ctr, published_at FROM analyses WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetAnalysisByID(ctx context.Context, id uuid.UUID) (Analysis, error) {
@@ -160,12 +162,14 @@ func (q *Queries) GetAnalysisByID(ctx context.Context, id uuid.UUID) (Analysis, 
 		&i.DeletedAt,
 		&i.RelevanceScore,
 		&i.RelevanceReasoning,
+		&i.ActualCtr,
+		&i.PublishedAt,
 	)
 	return i, err
 }
 
 const listAnalysesByWorkspace = `-- name: ListAnalysesByWorkspace :many
-SELECT id, workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status, score, visibility_score, contrast_score, attention_score, mobile_score, branding_score, curiosity_score, cv_results, competitor_avg, suggestions, competitor_count, rank_in_competitors, error_message, retry_count, created_at, updated_at, deleted_at, relevance_score, relevance_reasoning FROM analyses
+SELECT id, workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status, score, visibility_score, contrast_score, attention_score, mobile_score, branding_score, curiosity_score, cv_results, competitor_avg, suggestions, competitor_count, rank_in_competitors, error_message, retry_count, created_at, updated_at, deleted_at, relevance_score, relevance_reasoning, actual_ctr, published_at FROM analyses
 WHERE workspace_id = $1 AND deleted_at IS NULL
   AND ($4::varchar IS NULL OR status = $4)
 ORDER BY created_at DESC
@@ -221,6 +225,8 @@ func (q *Queries) ListAnalysesByWorkspace(ctx context.Context, arg ListAnalysesB
 			&i.DeletedAt,
 			&i.RelevanceScore,
 			&i.RelevanceReasoning,
+			&i.ActualCtr,
+			&i.PublishedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -276,6 +282,56 @@ func (q *Queries) NextThumbnailVersionNumber(ctx context.Context, analysisID uui
 	return column_1, err
 }
 
+const updateAnalysisCTR = `-- name: UpdateAnalysisCTR :one
+UPDATE analyses
+SET actual_ctr = $2, published_at = $3, updated_at = NOW()
+WHERE id = $1
+RETURNING id, workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status, score, visibility_score, contrast_score, attention_score, mobile_score, branding_score, curiosity_score, cv_results, competitor_avg, suggestions, competitor_count, rank_in_competitors, error_message, retry_count, created_at, updated_at, deleted_at, relevance_score, relevance_reasoning, actual_ctr, published_at
+`
+
+type UpdateAnalysisCTRParams struct {
+	ID          uuid.UUID          `json:"id"`
+	ActualCtr   pgtype.Float8      `json:"actual_ctr"`
+	PublishedAt pgtype.Timestamptz `json:"published_at"`
+}
+
+func (q *Queries) UpdateAnalysisCTR(ctx context.Context, arg UpdateAnalysisCTRParams) (Analysis, error) {
+	row := q.db.QueryRow(ctx, updateAnalysisCTR, arg.ID, arg.ActualCtr, arg.PublishedAt)
+	var i Analysis
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.ProjectID,
+		&i.UserID,
+		&i.Keyword,
+		&i.KeywordNormalized,
+		&i.ThumbnailS3Key,
+		&i.Status,
+		&i.Score,
+		&i.VisibilityScore,
+		&i.ContrastScore,
+		&i.AttentionScore,
+		&i.MobileScore,
+		&i.BrandingScore,
+		&i.CuriosityScore,
+		&i.CvResults,
+		&i.CompetitorAvg,
+		&i.Suggestions,
+		&i.CompetitorCount,
+		&i.RankInCompetitors,
+		&i.ErrorMessage,
+		&i.RetryCount,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.RelevanceScore,
+		&i.RelevanceReasoning,
+		&i.ActualCtr,
+		&i.PublishedAt,
+	)
+	return i, err
+}
+
 const updateAnalysisResults = `-- name: UpdateAnalysisResults :one
 UPDATE analyses
 SET
@@ -296,7 +352,7 @@ SET
     relevance_reasoning = $15,
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status, score, visibility_score, contrast_score, attention_score, mobile_score, branding_score, curiosity_score, cv_results, competitor_avg, suggestions, competitor_count, rank_in_competitors, error_message, retry_count, created_at, updated_at, deleted_at, relevance_score, relevance_reasoning
+RETURNING id, workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status, score, visibility_score, contrast_score, attention_score, mobile_score, branding_score, curiosity_score, cv_results, competitor_avg, suggestions, competitor_count, rank_in_competitors, error_message, retry_count, created_at, updated_at, deleted_at, relevance_score, relevance_reasoning, actual_ctr, published_at
 `
 
 type UpdateAnalysisResultsParams struct {
@@ -364,6 +420,8 @@ func (q *Queries) UpdateAnalysisResults(ctx context.Context, arg UpdateAnalysisR
 		&i.DeletedAt,
 		&i.RelevanceScore,
 		&i.RelevanceReasoning,
+		&i.ActualCtr,
+		&i.PublishedAt,
 	)
 	return i, err
 }
@@ -372,7 +430,7 @@ const updateAnalysisStatus = `-- name: UpdateAnalysisStatus :one
 UPDATE analyses
 SET status = $2, error_message = $3, updated_at = NOW()
 WHERE id = $1
-RETURNING id, workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status, score, visibility_score, contrast_score, attention_score, mobile_score, branding_score, curiosity_score, cv_results, competitor_avg, suggestions, competitor_count, rank_in_competitors, error_message, retry_count, created_at, updated_at, deleted_at, relevance_score, relevance_reasoning
+RETURNING id, workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status, score, visibility_score, contrast_score, attention_score, mobile_score, branding_score, curiosity_score, cv_results, competitor_avg, suggestions, competitor_count, rank_in_competitors, error_message, retry_count, created_at, updated_at, deleted_at, relevance_score, relevance_reasoning, actual_ctr, published_at
 `
 
 type UpdateAnalysisStatusParams struct {
@@ -412,6 +470,8 @@ func (q *Queries) UpdateAnalysisStatus(ctx context.Context, arg UpdateAnalysisSt
 		&i.DeletedAt,
 		&i.RelevanceScore,
 		&i.RelevanceReasoning,
+		&i.ActualCtr,
+		&i.PublishedAt,
 	)
 	return i, err
 }

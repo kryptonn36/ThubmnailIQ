@@ -52,3 +52,7 @@ func (u *Usecase) InviteMember(ctx context.Context, workspaceID uuid.UUID, email
 func (u *Usecase) ListMembers(ctx context.Context, workspaceID uuid.UUID) ([]*workspace.Member, error) {
 	return u.workspaces.ListMembers(ctx, workspaceID)
 }
+
+func (u *Usecase) UpdateBrand(ctx context.Context, workspaceID uuid.UUID, primary, secondary, font string) (*workspace.Workspace, error) {
+	return u.workspaces.UpdateBrand(ctx, workspaceID, primary, secondary, font)
+}

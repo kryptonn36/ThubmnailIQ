@@ -27,6 +27,12 @@ ORDER BY wm.joined_at;
 UPDATE workspaces SET analyses_this_month = analyses_this_month + 1, updated_at = NOW()
 WHERE id = $1;
 
+-- name: UpdateWorkspaceBrand :one
+UPDATE workspaces
+SET brand_primary_color = $2, brand_secondary_color = $3, brand_font = $4, updated_at = NOW()
+WHERE id = $1
+RETURNING *;
+
 -- name: UpdateWorkspacePlan :one
 UPDATE workspaces SET plan = $2, analyses_limit = $3, updated_at = NOW()
 WHERE id = $1

@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import type {
   BillingPlan,
   CheckoutResponse,
   ConfirmCheckoutResponse,
   CurrentSubscriptionResponse,
+  APIKey,
+  CreatedAPIKey,
 } from "@/types";
 
 declare global {
@@ -39,6 +41,57 @@ export default function BillingPage() {
   const [subscribing, setSubscribing] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
+  // API Keys
+  const [apiKeys, setApiKeys] = useState<APIKey[]>([]);
+  const [newKeyName, setNewKeyName] = useState("");
+  const [creatingKey, setCreatingKey] = useState(false);
+  const [createdKey, setCreatedKey] = useState<CreatedAPIKey | null>(null);
+  const [keyCopied, setKeyCopied] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
+
+  const loadApiKeys = useCallback(async () => {
+    try {
+      const keys = await api.get<APIKey[]>("/api-keys");
+      setApiKeys(keys);
+    } catch {
+      // non-fatal, don't block the whole page
+    }
+  }, []);
+
+  async function handleCreateKey(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newKeyName.trim()) return;
+    setCreatingKey(true);
+    setKeyError(null);
+    setCreatedKey(null);
+    try {
+      const result = await api.post<CreatedAPIKey>("/api-keys", { name: newKeyName.trim() });
+      setCreatedKey(result);
+      setNewKeyName("");
+      await loadApiKeys();
+    } catch (err) {
+      setKeyError(err instanceof ApiError ? err.message : "Failed to create API key.");
+    } finally {
+      setCreatingKey(false);
+    }
+  }
+
+  async function handleRevokeKey(id: string) {
+    try {
+      await api.del(`/api-keys/${id}`);
+      setApiKeys((prev) => prev.filter((k) => k.id !== id));
+      if (createdKey?.id === id) setCreatedKey(null);
+    } catch {
+      // ignore
+    }
+  }
+
+  function copyKey(key: string) {
+    navigator.clipboard.writeText(key);
+    setKeyCopied(true);
+    setTimeout(() => setKeyCopied(false), 2000);
+  }
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -50,6 +103,7 @@ export default function BillingPage() {
         if (cancelled) return;
         setPlans(plansData);
         setCurrentSub(subData);
+        loadApiKeys();
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof ApiError ? err.message : "Failed to load billing info.");
@@ -61,6 +115,7 @@ export default function BillingPage() {
     return () => {
       cancelled = true;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const currentPlanDef = plans.find((p) => p.id === currentSub?.plan);
@@ -209,6 +264,100 @@ export default function BillingPage() {
           })}
         </div>
       )}
+
+      {/* ── API Keys ── */}
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-xl font-bold text-white">API Keys</h2>
+          <p className="mt-1 text-sm text-gray-400">
+            Use an API key to authenticate the browser extension or any other integration. The raw key is shown only once — copy it immediately.
+          </p>
+        </div>
+
+        {/* Create new key */}
+        <form
+          onSubmit={handleCreateKey}
+          className="rounded-2xl border border-surface-300 bg-surface-100 p-5"
+        >
+          <h3 className="mb-3 text-sm font-semibold text-white">Create a new key</h3>
+          <div className="flex gap-3">
+            <input
+              type="text"
+              value={newKeyName}
+              onChange={(e) => setNewKeyName(e.target.value)}
+              placeholder="e.g. Chrome Extension"
+              className="flex-1 rounded-lg border border-surface-300 bg-surface-200 px-3 py-2 text-sm text-white outline-none focus:border-brand-500 placeholder:text-gray-600"
+            />
+            <button
+              type="submit"
+              disabled={creatingKey || !newKeyName.trim()}
+              className="rounded-lg bg-brand-gradient px-5 py-2 text-sm font-semibold text-white shadow-glow transition hover:opacity-90 disabled:opacity-60"
+            >
+              {creatingKey ? "Creating…" : "Create Key"}
+            </button>
+          </div>
+          {keyError && <p className="mt-2 text-xs text-red-400">{keyError}</p>}
+        </form>
+
+        {/* Newly created key — show raw value once */}
+        {createdKey && (
+          <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-5">
+            <p className="mb-1 text-sm font-semibold text-emerald-300">
+              ✓ Key created — copy it now, it won&apos;t be shown again
+            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <code className="flex-1 break-all rounded-lg border border-emerald-500/30 bg-black/30 px-3 py-2 font-mono text-xs text-emerald-300">
+                {createdKey.key}
+              </code>
+              <button
+                type="button"
+                onClick={() => copyKey(createdKey.key)}
+                className="shrink-0 rounded-lg border border-emerald-500/40 px-3 py-2 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/10"
+              >
+                {keyCopied ? "Copied ✓" : "Copy"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Existing keys list */}
+        {apiKeys.length > 0 ? (
+          <div className="space-y-2">
+            {apiKeys.map((k) => (
+              <div
+                key={k.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-surface-300 bg-surface-100 px-4 py-3"
+              >
+                <div>
+                  <p className="text-sm font-medium text-white">{k.name}</p>
+                  <p className="mt-0.5 font-mono text-xs text-gray-500">
+                    {k.key_prefix}••••••••
+                  </p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="text-right text-xs text-gray-500">
+                    <p>{k.requests_this_month} / {k.requests_limit} requests</p>
+                    <p>Created {new Date(k.created_at).toLocaleDateString()}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRevokeKey(k.id)}
+                    className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 transition hover:bg-red-500/20"
+                  >
+                    Revoke
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          !loading && (
+            <p className="rounded-xl border border-dashed border-surface-300 px-4 py-6 text-center text-sm text-gray-500">
+              No API keys yet. Create one above to connect the browser extension or external tools.
+            </p>
+          )
+        )}
+      </div>
     </div>
   );
 }

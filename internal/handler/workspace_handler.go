@@ -69,6 +69,31 @@ func (h *WorkspaceHandler) InviteMember(c *gin.Context) {
 	c.JSON(http.StatusCreated, member)
 }
 
+type updateBrandRequest struct {
+	PrimaryColor   string `json:"primary_color" binding:"required"`
+	SecondaryColor string `json:"secondary_color" binding:"required"`
+	Font           string `json:"font" binding:"required"`
+}
+
+func (h *WorkspaceHandler) UpdateBrand(c *gin.Context) {
+	workspaceID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid workspace id"})
+		return
+	}
+	var req updateBrandRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	ws, err := h.uc.UpdateBrand(c.Request.Context(), workspaceID, req.PrimaryColor, req.SecondaryColor, req.Font)
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, ws)
+}
+
 func (h *WorkspaceHandler) ListMembers(c *gin.Context) {
 	workspaceID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
