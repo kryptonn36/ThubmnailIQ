@@ -119,7 +119,7 @@ func Load() (*Config, error) {
 	v.SetDefault("s3.public_read", true)
 	v.SetDefault("cdn.domain", "http://localhost:9000/thumbnailiq-uploads")
 	v.SetDefault("cv_service.url", "http://localhost:8001")
-	v.SetDefault("gemini.api", "geminiAPI")
+	v.SetDefault("gemini.api_key", "")
 	v.SetDefault("gemini.model", "gemini-2.0-flash")
 	v.SetDefault("payment.provider", "razorpay")
 	v.SetDefault("payment.currency", "USD")

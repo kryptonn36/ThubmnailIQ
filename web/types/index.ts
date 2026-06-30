@@ -48,18 +48,26 @@ export interface DominantColor {
 }
 
 export interface CVResults {
-  face_count: number;
-  primary_emotion: string | null;
-  text_detected: boolean;
-  text_strings: string[];
-  text_density_pct: number;
-  word_count: number;
-  dominant_colors: DominantColor[];
-  contrast_score: number;
-  brightness_score: number;
-  saturation_score: number;
-  object_count: number;
-  clutter_score: number;
+  ocr: {
+    text_detected: boolean;
+    text_strings: string[];
+    text_density_pct: number;
+    word_count: number;
+  };
+  face: {
+    face_count: number;
+    primary_emotion: string | null;
+  };
+  colors: {
+    dominant_colors: DominantColor[];
+    contrast_score: number;
+    brightness_score: number;
+    saturation_score: number;
+  };
+  clutter: {
+    object_count: number;
+    clutter_score: number;
+  };
   visual_complexity: number;
 }
 
@@ -117,6 +125,8 @@ export interface AnalysisFull {
   suggestions: Suggestion[];
   competitor_count: number;
   rank_in_competitors: number | null;
+  relevance_score: number | null;
+  relevance_reasoning: string;
   competitors: Competitor[];
   versions?: ThumbnailVersion[];
 }

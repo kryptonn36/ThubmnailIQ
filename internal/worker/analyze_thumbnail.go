@@ -128,8 +128,23 @@ func (h *AnalysisHandler) run(ctx context.Context, a *analysis.Analysis) (*analy
 		Branding:   h.engine.Branding(),
 		Curiosity:  curiosity.Score,
 	}
-	final := h.engine.FinalScore(sub)
+	visualScore := h.engine.FinalScore(sub)
 	suggestions := scoring.BuildSuggestions(ownCV, sub, avg)
+
+	// Every sub-score above measures the thumbnail's own visual properties
+	// (contrast, faces, clutter...) against competitors — none of them
+	// check whether it has anything to do with the keyword it was uploaded
+	// for. A polished but completely off-topic thumbnail would otherwise
+	// rank well purely on those generic heuristics. Relevance gates the
+	// final score and rank multiplicatively: fully relevant leaves it
+	// unchanged, fully irrelevant drives it toward zero. Competitor scores
+	// aren't gated since YouTube's own search already guarantees they're
+	// on-topic for the keyword.
+	relevance, err := h.gemini.ScoreRelevance(ctx, thumbnailURL, a.Keyword, ownCV.OCR.TextStrings)
+	if err != nil {
+		relevance = &gemini.RelevanceResult{Score: 100, Reasoning: "relevance check unavailable"}
+	}
+	final := visualScore * relevance.Score / 100
 
 	rank := rankAmongCompetitors(final, competitorScores)
 
@@ -149,6 +164,8 @@ func (h *AnalysisHandler) run(ctx context.Context, a *analysis.Analysis) (*analy
 	a.Suggestions = suggestionsJSON
 	a.CompetitorCount = len(competitors)
 	a.RankInCompetitors = &rank
+	a.RelevanceScore = &relevance.Score
+	a.RelevanceReasoning = relevance.Reasoning
 
 	return a, nil
 }

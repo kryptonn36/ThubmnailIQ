@@ -35,6 +35,8 @@ type Analysis struct {
 	Suggestions       []byte
 	CompetitorCount   int
 	RankInCompetitors *int
+	RelevanceScore    *int
+	RelevanceReasoning string
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 }

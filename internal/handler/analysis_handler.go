@@ -144,6 +144,7 @@ func (h *AnalysisHandler) Get(c *gin.Context) {
 		"attention_score": a.AttentionScore, "mobile_score": a.MobileScore,
 		"branding_score": a.BrandingScore, "curiosity_score": a.CuriosityScore,
 		"competitor_count": a.CompetitorCount, "rank_in_competitors": a.RankInCompetitors,
+		"relevance_score": a.RelevanceScore, "relevance_reasoning": a.RelevanceReasoning,
 		"error_message": a.ErrorMessage,
 	}
 	resp["cv_results"] = rawJSONOrNil(a.CVResults)

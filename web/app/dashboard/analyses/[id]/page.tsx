@@ -7,6 +7,7 @@ import ScoreGauge from "@/components/ScoreGauge";
 import SuggestionList from "@/components/SuggestionList";
 import CompetitorGrid from "@/components/CompetitorGrid";
 import CVBreakdown from "@/components/CVBreakdown";
+import ImageLightbox from "@/components/ImageLightbox";
 import { api, ApiError } from "@/lib/api";
 
 const SUB_SCORES: { key: "visibility_score" | "contrast_score" | "attention_score" | "mobile_score" | "branding_score" | "curiosity_score"; label: string }[] = [
@@ -25,6 +26,7 @@ export default function AnalysisDetailPage() {
 
   const [compareSubmitting, setCompareSubmitting] = useState(false);
   const [compareError, setCompareError] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
 
   async function handleAddVersion(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -108,16 +110,30 @@ export default function AnalysisDetailPage() {
         <p className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-400">{compareError}</p>
       )}
 
+      {analysis.relevance_score !== null && analysis.relevance_score < 70 && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+          <p className="font-medium">
+            Low relevance to &ldquo;{analysis.keyword}&rdquo; ({analysis.relevance_score}%) — this
+            pulled the score and rank down
+          </p>
+          <p className="mt-1 text-amber-300/80">{analysis.relevance_reasoning}</p>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="rounded-2xl border border-surface-300 bg-surface-100 p-6 lg:col-span-1">
-          <div className="mb-4 overflow-hidden rounded-xl bg-surface-300">
+          <button
+            type="button"
+            onClick={() => setLightbox({ src: analysis.thumbnail_url, alt: analysis.keyword })}
+            className="mb-4 block w-full overflow-hidden rounded-xl bg-surface-300 transition hover:opacity-90"
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={analysis.thumbnail_url}
               alt={analysis.keyword}
-              className="aspect-video w-full object-cover"
+              className="aspect-video w-full cursor-zoom-in object-cover"
             />
-          </div>
+          </button>
           <div className="flex items-center justify-center">
             <ScoreGauge score={analysis.score ?? 0} />
           </div>
@@ -180,20 +196,28 @@ export default function AnalysisDetailPage() {
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {analysis.versions.map((v) => (
               <div key={v.id} className="rounded-xl border border-surface-300 bg-surface-200 p-3">
-                <div className="mb-2 overflow-hidden rounded-lg bg-surface-300">
+                <button
+                  type="button"
+                  onClick={() => setLightbox({ src: v.thumbnail_url, alt: `Version ${v.version_number}` })}
+                  className="mb-2 block w-full overflow-hidden rounded-lg bg-surface-300 transition hover:opacity-90"
+                >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={v.thumbnail_url}
                     alt={`Version ${v.version_number}`}
-                    className="aspect-video w-full object-cover"
+                    className="aspect-video w-full cursor-zoom-in object-cover"
                   />
-                </div>
+                </button>
                 <p className="text-xs text-gray-400">Version {v.version_number}</p>
                 <p className="text-lg font-bold text-white">{v.score}</p>
               </div>
             ))}
           </div>
         </div>
+      )}
+
+      {lightbox && (
+        <ImageLightbox src={lightbox.src} alt={lightbox.alt} onClose={() => setLightbox(null)} />
       )}
     </div>
   );

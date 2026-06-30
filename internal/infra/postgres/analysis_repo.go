@@ -44,6 +44,8 @@ func toDomainAnalysis(a db.Analysis) *analysis.Analysis {
 		Suggestions:       a.Suggestions,
 		CompetitorCount:   int4Val(a.CompetitorCount),
 		RankInCompetitors: int4Ptr(a.RankInCompetitors),
+		RelevanceScore:     int4Ptr(a.RelevanceScore),
+		RelevanceReasoning: textVal(a.RelevanceReasoning),
 		CreatedAt:         tsVal(a.CreatedAt),
 		UpdatedAt:         tsVal(a.UpdatedAt),
 	}
@@ -124,6 +126,8 @@ func (r *AnalysisRepo) UpdateResults(ctx context.Context, a *analysis.Analysis) 
 		Suggestions:       a.Suggestions,
 		CompetitorCount:   int4OrNil(&a.CompetitorCount),
 		RankInCompetitors: int4OrNil(a.RankInCompetitors),
+		RelevanceScore:     int4OrNil(a.RelevanceScore),
+		RelevanceReasoning: textOrNil(a.RelevanceReasoning),
 	})
 	return err
 }

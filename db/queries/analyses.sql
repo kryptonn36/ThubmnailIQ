@@ -42,6 +42,8 @@ SET
     suggestions = $11,
     competitor_count = $12,
     rank_in_competitors = $13,
+    relevance_score = $14,
+    relevance_reasoning = $15,
     updated_at = NOW()
 WHERE id = $1
 RETURNING *;

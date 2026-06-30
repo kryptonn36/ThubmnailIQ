@@ -35,7 +35,7 @@ INSERT INTO analyses (
     workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status
 ) VALUES (
     $1, $2, $3, $4, $5, $6, 'pending'
-) RETURNING id, workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status, score, visibility_score, contrast_score, attention_score, mobile_score, branding_score, curiosity_score, cv_results, competitor_avg, suggestions, competitor_count, rank_in_competitors, error_message, retry_count, created_at, updated_at, deleted_at
+) RETURNING id, workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status, score, visibility_score, contrast_score, attention_score, mobile_score, branding_score, curiosity_score, cv_results, competitor_avg, suggestions, competitor_count, rank_in_competitors, error_message, retry_count, created_at, updated_at, deleted_at, relevance_score, relevance_reasoning
 `
 
 type CreateAnalysisParams struct {
@@ -83,6 +83,8 @@ func (q *Queries) CreateAnalysis(ctx context.Context, arg CreateAnalysisParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.RelevanceScore,
+		&i.RelevanceReasoning,
 	)
 	return i, err
 }
@@ -124,7 +126,7 @@ func (q *Queries) CreateThumbnailVersion(ctx context.Context, arg CreateThumbnai
 }
 
 const getAnalysisByID = `-- name: GetAnalysisByID :one
-SELECT id, workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status, score, visibility_score, contrast_score, attention_score, mobile_score, branding_score, curiosity_score, cv_results, competitor_avg, suggestions, competitor_count, rank_in_competitors, error_message, retry_count, created_at, updated_at, deleted_at FROM analyses WHERE id = $1 AND deleted_at IS NULL
+SELECT id, workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status, score, visibility_score, contrast_score, attention_score, mobile_score, branding_score, curiosity_score, cv_results, competitor_avg, suggestions, competitor_count, rank_in_competitors, error_message, retry_count, created_at, updated_at, deleted_at, relevance_score, relevance_reasoning FROM analyses WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetAnalysisByID(ctx context.Context, id uuid.UUID) (Analysis, error) {
@@ -156,12 +158,14 @@ func (q *Queries) GetAnalysisByID(ctx context.Context, id uuid.UUID) (Analysis, 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.RelevanceScore,
+		&i.RelevanceReasoning,
 	)
 	return i, err
 }
 
 const listAnalysesByWorkspace = `-- name: ListAnalysesByWorkspace :many
-SELECT id, workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status, score, visibility_score, contrast_score, attention_score, mobile_score, branding_score, curiosity_score, cv_results, competitor_avg, suggestions, competitor_count, rank_in_competitors, error_message, retry_count, created_at, updated_at, deleted_at FROM analyses
+SELECT id, workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status, score, visibility_score, contrast_score, attention_score, mobile_score, branding_score, curiosity_score, cv_results, competitor_avg, suggestions, competitor_count, rank_in_competitors, error_message, retry_count, created_at, updated_at, deleted_at, relevance_score, relevance_reasoning FROM analyses
 WHERE workspace_id = $1 AND deleted_at IS NULL
   AND ($4::varchar IS NULL OR status = $4)
 ORDER BY created_at DESC
@@ -215,6 +219,8 @@ func (q *Queries) ListAnalysesByWorkspace(ctx context.Context, arg ListAnalysesB
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.RelevanceScore,
+			&i.RelevanceReasoning,
 		); err != nil {
 			return nil, err
 		}
@@ -286,25 +292,29 @@ SET
     suggestions = $11,
     competitor_count = $12,
     rank_in_competitors = $13,
+    relevance_score = $14,
+    relevance_reasoning = $15,
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status, score, visibility_score, contrast_score, attention_score, mobile_score, branding_score, curiosity_score, cv_results, competitor_avg, suggestions, competitor_count, rank_in_competitors, error_message, retry_count, created_at, updated_at, deleted_at
+RETURNING id, workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status, score, visibility_score, contrast_score, attention_score, mobile_score, branding_score, curiosity_score, cv_results, competitor_avg, suggestions, competitor_count, rank_in_competitors, error_message, retry_count, created_at, updated_at, deleted_at, relevance_score, relevance_reasoning
 `
 
 type UpdateAnalysisResultsParams struct {
-	ID                uuid.UUID   `json:"id"`
-	Score             pgtype.Int4 `json:"score"`
-	VisibilityScore   pgtype.Int4 `json:"visibility_score"`
-	ContrastScore     pgtype.Int4 `json:"contrast_score"`
-	AttentionScore    pgtype.Int4 `json:"attention_score"`
-	MobileScore       pgtype.Int4 `json:"mobile_score"`
-	BrandingScore     pgtype.Int4 `json:"branding_score"`
-	CuriosityScore    pgtype.Int4 `json:"curiosity_score"`
-	CvResults         []byte      `json:"cv_results"`
-	CompetitorAvg     []byte      `json:"competitor_avg"`
-	Suggestions       []byte      `json:"suggestions"`
-	CompetitorCount   pgtype.Int4 `json:"competitor_count"`
-	RankInCompetitors pgtype.Int4 `json:"rank_in_competitors"`
+	ID                 uuid.UUID   `json:"id"`
+	Score              pgtype.Int4 `json:"score"`
+	VisibilityScore    pgtype.Int4 `json:"visibility_score"`
+	ContrastScore      pgtype.Int4 `json:"contrast_score"`
+	AttentionScore     pgtype.Int4 `json:"attention_score"`
+	MobileScore        pgtype.Int4 `json:"mobile_score"`
+	BrandingScore      pgtype.Int4 `json:"branding_score"`
+	CuriosityScore     pgtype.Int4 `json:"curiosity_score"`
+	CvResults          []byte      `json:"cv_results"`
+	CompetitorAvg      []byte      `json:"competitor_avg"`
+	Suggestions        []byte      `json:"suggestions"`
+	CompetitorCount    pgtype.Int4 `json:"competitor_count"`
+	RankInCompetitors  pgtype.Int4 `json:"rank_in_competitors"`
+	RelevanceScore     pgtype.Int4 `json:"relevance_score"`
+	RelevanceReasoning pgtype.Text `json:"relevance_reasoning"`
 }
 
 func (q *Queries) UpdateAnalysisResults(ctx context.Context, arg UpdateAnalysisResultsParams) (Analysis, error) {
@@ -322,6 +332,8 @@ func (q *Queries) UpdateAnalysisResults(ctx context.Context, arg UpdateAnalysisR
 		arg.Suggestions,
 		arg.CompetitorCount,
 		arg.RankInCompetitors,
+		arg.RelevanceScore,
+		arg.RelevanceReasoning,
 	)
 	var i Analysis
 	err := row.Scan(
@@ -350,6 +362,8 @@ func (q *Queries) UpdateAnalysisResults(ctx context.Context, arg UpdateAnalysisR
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.RelevanceScore,
+		&i.RelevanceReasoning,
 	)
 	return i, err
 }
@@ -358,7 +372,7 @@ const updateAnalysisStatus = `-- name: UpdateAnalysisStatus :one
 UPDATE analyses
 SET status = $2, error_message = $3, updated_at = NOW()
 WHERE id = $1
-RETURNING id, workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status, score, visibility_score, contrast_score, attention_score, mobile_score, branding_score, curiosity_score, cv_results, competitor_avg, suggestions, competitor_count, rank_in_competitors, error_message, retry_count, created_at, updated_at, deleted_at
+RETURNING id, workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status, score, visibility_score, contrast_score, attention_score, mobile_score, branding_score, curiosity_score, cv_results, competitor_avg, suggestions, competitor_count, rank_in_competitors, error_message, retry_count, created_at, updated_at, deleted_at, relevance_score, relevance_reasoning
 `
 
 type UpdateAnalysisStatusParams struct {
@@ -396,6 +410,8 @@ func (q *Queries) UpdateAnalysisStatus(ctx context.Context, arg UpdateAnalysisSt
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.RelevanceScore,
+		&i.RelevanceReasoning,
 	)
 	return i, err
 }
