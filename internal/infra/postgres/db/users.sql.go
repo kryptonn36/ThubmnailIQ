@@ -48,7 +48,7 @@ func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshToken
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, password_hash, full_name)
 VALUES ($1, $2, $3)
-RETURNING id, email, password_hash, full_name, avatar_url, google_id, email_verified, stripe_customer_id, created_at, updated_at, deleted_at
+RETURNING id, email, password_hash, full_name, avatar_url, google_id, email_verified, stripe_customer_id, created_at, updated_at, deleted_at, status
 `
 
 type CreateUserParams struct {
@@ -72,6 +72,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Status,
 	)
 	return i, err
 }
@@ -96,7 +97,7 @@ func (q *Queries) GetRefreshToken(ctx context.Context, tokenHash string) (Refres
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, full_name, avatar_url, google_id, email_verified, stripe_customer_id, created_at, updated_at, deleted_at FROM users WHERE email = $1 AND deleted_at IS NULL
+SELECT id, email, password_hash, full_name, avatar_url, google_id, email_verified, stripe_customer_id, created_at, updated_at, deleted_at, status FROM users WHERE email = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -114,12 +115,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Status,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, password_hash, full_name, avatar_url, google_id, email_verified, stripe_customer_id, created_at, updated_at, deleted_at FROM users WHERE id = $1 AND deleted_at IS NULL
+SELECT id, email, password_hash, full_name, avatar_url, google_id, email_verified, stripe_customer_id, created_at, updated_at, deleted_at, status FROM users WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
@@ -137,6 +139,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Status,
 	)
 	return i, err
 }

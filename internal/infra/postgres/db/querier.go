@@ -12,41 +12,100 @@ import (
 )
 
 type Querier interface {
+	APIUsageStats(ctx context.Context) (APIUsageStatsRow, error)
+	ActivateUserAdmin(ctx context.Context, id uuid.UUID) error
 	AddWorkspaceMember(ctx context.Context, arg AddWorkspaceMemberParams) (WorkspaceMember, error)
+	ChangeUserWorkspaceRoleAdmin(ctx context.Context, arg ChangeUserWorkspaceRoleAdminParams) error
+	CountActiveUsers(ctx context.Context) (int64, error)
 	CountAnalysesByWorkspace(ctx context.Context, arg CountAnalysesByWorkspaceParams) (int64, error)
+	CountAuditLogs(ctx context.Context) (int64, error)
+	CountUploads(ctx context.Context) (int64, error)
+	CountUploadsAdmin(ctx context.Context, arg CountUploadsAdminParams) (int64, error)
+	CountUploadsThisMonth(ctx context.Context) (int64, error)
+	CountUploadsToday(ctx context.Context) (int64, error)
+	CountUserUploads(ctx context.Context, userID uuid.UUID) (int64, error)
+	// Dashboard -------------------------------------------------------------
+	CountUsers(ctx context.Context) (int64, error)
+	CountUsersAdmin(ctx context.Context, arg CountUsersAdminParams) (int64, error)
+	CreateAdmin(ctx context.Context, arg CreateAdminParams) (AdminUser, error)
+	CreateAdminRefreshToken(ctx context.Context, arg CreateAdminRefreshTokenParams) (AdminRefreshToken, error)
 	CreateAnalysis(ctx context.Context, arg CreateAnalysisParams) (Analysis, error)
 	CreateApiKey(ctx context.Context, arg CreateApiKeyParams) (ApiKey, error)
+	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AdminAuditLog, error)
 	CreateCompetitorSnapshot(ctx context.Context, arg CreateCompetitorSnapshotParams) (CompetitorSnapshot, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error)
 	CreateThumbnailVersion(ctx context.Context, arg CreateThumbnailVersionParams) (ThumbnailVersion, error)
 	CreateTrackingJob(ctx context.Context, arg CreateTrackingJobParams) (TrackingJob, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams) (Workspace, error)
+	// Analytics -----------------------------------------------------------------
+	DailySignupTrend(ctx context.Context) ([]DailySignupTrendRow, error)
+	DailyUploadTrend(ctx context.Context) ([]DailyUploadTrendRow, error)
+	// The upload pipeline currently always writes .jpg regardless of the
+	// original content type (see usecase/analysis.Create), so this will read as
+	// entirely "jpg" today — grouping by the real stored extension keeps this
+	// query correct if that ever changes, rather than hardcoding "jpg".
+	FileTypeBreakdown(ctx context.Context) ([]FileTypeBreakdownRow, error)
+	GetAdminByEmail(ctx context.Context, email string) (AdminUser, error)
+	GetAdminByID(ctx context.Context, id uuid.UUID) (AdminUser, error)
+	GetAdminRefreshToken(ctx context.Context, tokenHash string) (AdminRefreshToken, error)
 	GetAnalysisByID(ctx context.Context, id uuid.UUID) (Analysis, error)
 	GetApiKeyByHash(ctx context.Context, keyHash string) (ApiKey, error)
+	// Settings --------------------------------------------------------------
+	GetAppSettings(ctx context.Context) (AppSetting, error)
 	GetRefreshToken(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetSubscriptionByWorkspace(ctx context.Context, workspaceID uuid.UUID) (Subscription, error)
+	GetUploadAdmin(ctx context.Context, id uuid.UUID) (Analysis, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	GetUserDetailAdmin(ctx context.Context, id uuid.UUID) (GetUserDetailAdminRow, error)
 	GetWorkspaceByID(ctx context.Context, id uuid.UUID) (Workspace, error)
 	IncrementWorkspaceAnalysesUsage(ctx context.Context, id uuid.UUID) error
 	ListAnalysesByWorkspace(ctx context.Context, arg ListAnalysesByWorkspaceParams) ([]Analysis, error)
 	ListApiKeysByWorkspace(ctx context.Context, workspaceID uuid.UUID) ([]ApiKey, error)
+	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AdminAuditLog, error)
 	ListCompetitorsByAnalysis(ctx context.Context, analysisID pgtype.UUID) ([]CompetitorSnapshot, error)
 	ListDueTrackingJobs(ctx context.Context) ([]TrackingJob, error)
 	ListLatestCompetitorsByKeyword(ctx context.Context, arg ListLatestCompetitorsByKeywordParams) ([]CompetitorSnapshot, error)
+	ListRecentUploads(ctx context.Context, limit int32) ([]Analysis, error)
+	ListRecentUsers(ctx context.Context, limit int32) ([]User, error)
 	ListThumbnailVersions(ctx context.Context, analysisID uuid.UUID) ([]ThumbnailVersion, error)
 	ListTrackingJobsByWorkspace(ctx context.Context, workspaceID uuid.UUID) ([]TrackingJob, error)
+	// Upload management ---------------------------------------------------------
+	//
+	// include_deleted lets the admin list soft-deleted uploads too (needed to
+	// find something to restore); the customer-facing analyses list never does.
+	ListUploadsAdmin(ctx context.Context, arg ListUploadsAdminParams) ([]Analysis, error)
+	ListUserUploadsAdmin(ctx context.Context, arg ListUserUploadsAdminParams) ([]Analysis, error)
+	// User management ---------------------------------------------------------
+	//
+	// ListUsersAdmin/GetUserDetailAdmin fold each user's primary-workspace plan
+	// and analyses/storage totals into the same query via LATERAL joins, instead
+	// of issuing 2-3 extra round-trips per user (avoids N+1 on the paginated
+	// list).
+	ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) ([]ListUsersAdminRow, error)
 	ListWorkspaceMembers(ctx context.Context, workspaceID uuid.UUID) ([]ListWorkspaceMembersRow, error)
 	ListWorkspacesForUser(ctx context.Context, userID uuid.UUID) ([]Workspace, error)
 	MarkTrackingJobChecked(ctx context.Context, id uuid.UUID) error
+	MonthlySignupTrend(ctx context.Context) ([]MonthlySignupTrendRow, error)
 	NextThumbnailVersionNumber(ctx context.Context, analysisID uuid.UUID) (int32, error)
+	ResetUserPasswordAdmin(ctx context.Context, arg ResetUserPasswordAdminParams) error
+	RestoreUploadAdmin(ctx context.Context, id uuid.UUID) error
+	RevokeAdminRefreshToken(ctx context.Context, tokenHash string) error
 	RevokeApiKey(ctx context.Context, arg RevokeApiKeyParams) error
 	RevokeRefreshToken(ctx context.Context, tokenHash string) error
 	SearchViralThumbnails(ctx context.Context, arg SearchViralThumbnailsParams) ([]ViralThumbnail, error)
+	SoftDeleteUploadAdmin(ctx context.Context, id uuid.UUID) error
+	SoftDeleteUserAdmin(ctx context.Context, id uuid.UUID) error
+	SumStorageUsed(ctx context.Context) (int64, error)
+	SuspendUserAdmin(ctx context.Context, id uuid.UUID) error
+	TopActiveUsers(ctx context.Context, limit int32) ([]TopActiveUsersRow, error)
+	UpdateAdminLastLogin(ctx context.Context, id uuid.UUID) error
+	UpdateAdminPassword(ctx context.Context, arg UpdateAdminPasswordParams) error
 	UpdateAnalysisCTR(ctx context.Context, arg UpdateAnalysisCTRParams) (Analysis, error)
 	UpdateAnalysisResults(ctx context.Context, arg UpdateAnalysisResultsParams) (Analysis, error)
 	UpdateAnalysisStatus(ctx context.Context, arg UpdateAnalysisStatusParams) (Analysis, error)
+	UpdateAppSettings(ctx context.Context, arg UpdateAppSettingsParams) (AppSetting, error)
 	UpdateWorkspaceBrand(ctx context.Context, arg UpdateWorkspaceBrandParams) (Workspace, error)
 	UpdateWorkspacePlan(ctx context.Context, arg UpdateWorkspacePlanParams) (Workspace, error)
 	UpsertSubscription(ctx context.Context, arg UpsertSubscriptionParams) (Subscription, error)

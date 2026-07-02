@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { Brain, Contrast, Eye, Lightbulb, Smartphone, Tag, Target, Trophy, type LucideIcon } from "lucide-react";
 import type { AnalysisFull, ThumbnailVersion, CVResults } from "@/types";
 import ImageLightbox from "./ImageLightbox";
+import { Card } from "@/components/ui/Card";
 
 // ---------- scoring helpers (mirrors the Go scoring engine) ----------
 
@@ -64,47 +66,47 @@ interface VersionData {
 const SUB_SCORE_META: Array<{
   key: keyof SubScores;
   label: string;
-  icon: string;
+  icon: LucideIcon;
   tip: (winner: string) => string;
 }> = [
   {
     key: "visibility",
     label: "Visibility",
-    icon: "👁",
+    icon: Eye,
     tip: (w) =>
       `${w} stands out the most in crowded search results due to stronger colour contrast and saturation.`,
   },
   {
     key: "contrast",
     label: "Contrast",
-    icon: "🌓",
+    icon: Contrast,
     tip: (w) =>
       `${w} achieves the highest WCAG contrast ratio — text and elements are easiest to read at a glance.`,
   },
   {
     key: "attention",
     label: "Attention",
-    icon: "🎯",
+    icon: Target,
     tip: (w) =>
       `${w} has the strongest emotional hook — face presence and large text grab attention fastest.`,
   },
   {
     key: "mobile",
     label: "Mobile",
-    icon: "📱",
+    icon: Smartphone,
     tip: (w) =>
       `${w} has the cleanest mobile layout — least clutter and optimal text size for small screens.`,
   },
   {
     key: "branding",
     label: "Branding",
-    icon: "🏷",
+    icon: Tag,
     tip: () => `Branding is consistent across all versions (requires channel history to differentiate).`,
   },
   {
     key: "curiosity",
     label: "Curiosity",
-    icon: "🧠",
+    icon: Brain,
     tip: () => `Curiosity scoring requires Gemini API for live analysis.`,
   },
 ];
@@ -198,10 +200,10 @@ export default function VersionComparison({ analysis, versions }: Props) {
         />
       )}
 
-      <div className="rounded-2xl border border-surface-300 bg-surface-100 p-6 space-y-6">
+      <Card className="space-y-6 p-6">
         <div>
           <h2 className="text-base font-semibold text-white">Version Comparison</h2>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <p className="mt-0.5 text-xs text-gray-500">
             Side-by-side breakdown of every sub-score across all versions
           </p>
         </div>
@@ -211,7 +213,7 @@ export default function VersionComparison({ analysis, versions }: Props) {
           {all.map((v, i) => (
             <div
               key={i}
-              className={`flex flex-col rounded-xl border p-3 ${
+              className={`flex flex-col rounded-xl border p-3 transition-colors duration-150 ${
                 i === bestOverallIdx
                   ? "border-brand-500 bg-brand-600/10"
                   : "border-surface-300 bg-surface-200"
@@ -225,7 +227,7 @@ export default function VersionComparison({ analysis, versions }: Props) {
               <button
                 type="button"
                 onClick={() => setLightbox({ src: v.thumbnailUrl, alt: v.label })}
-                className="overflow-hidden rounded-lg bg-surface-300 transition hover:opacity-90 mb-2"
+                className="mb-2 overflow-hidden rounded-lg bg-surface-300 transition-opacity duration-150 hover:opacity-90"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -235,7 +237,7 @@ export default function VersionComparison({ analysis, versions }: Props) {
                 />
               </button>
               <p className="text-xs font-medium text-gray-400">{v.label}</p>
-              <p className={`text-2xl font-bold ${scoreColor(v.totalScore)}`}>
+              <p className={`text-2xl font-bold tracking-tight ${scoreColor(v.totalScore)}`}>
                 {v.totalScore}
               </p>
               <p className="text-[10px] text-gray-600">overall score</p>
@@ -248,38 +250,39 @@ export default function VersionComparison({ analysis, versions }: Props) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-surface-300">
-                <th className="py-2 text-left text-xs font-medium text-gray-500 w-28">Metric</th>
+                <th className="w-28 py-2 text-left text-xs font-medium text-gray-500">Metric</th>
                 {all.map((v, i) => (
-                  <th key={i} className="py-2 text-center text-xs font-medium text-gray-400 min-w-[80px]">
+                  <th key={i} className="min-w-[80px] py-2 text-center text-xs font-medium text-gray-400">
                     {v.label}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {SUB_SCORE_META.map(({ key, label, icon }) => {
+              {SUB_SCORE_META.map(({ key, label, icon: Icon }) => {
                 const winnerIdx = winners[key];
                 return (
                   <tr key={key} className="border-b border-surface-300/50">
                     <td className="py-3 pr-4">
-                      <span className="mr-1">{icon}</span>
-                      <span className="text-xs text-gray-400">{label}</span>
+                      <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
+                        <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                        {label}
+                      </span>
                     </td>
                     {all.map((v, i) => {
                       const val = v.sub[key];
                       const isWinner = i === winnerIdx;
                       return (
-                        <td key={i} className="py-3 px-2 text-center">
-                          <div className={`inline-flex flex-col items-center gap-1 rounded-lg px-2 py-1 ${isWinner ? "bg-emerald-500/15 ring-1 ring-emerald-500/40" : ""}`}>
-                            <span className={`text-sm font-bold ${isWinner ? "text-emerald-400" : "text-white"}`}>
+                        <td key={i} className="px-2 py-3 text-center">
+                          <div
+                            className={`inline-flex flex-col items-center gap-1 rounded-lg px-2 py-1 ${isWinner ? "bg-success/15 ring-1 ring-success/40" : ""}`}
+                          >
+                            <span className={`text-sm font-bold ${isWinner ? "text-success" : "text-white"}`}>
                               {val}
                               {isWinner && <span className="ml-1 text-[9px]">▲</span>}
                             </span>
-                            <div className="w-12 h-1.5 rounded-full bg-surface-300 overflow-hidden">
-                              <div
-                                className={`h-full rounded-full ${barColor(val)}`}
-                                style={{ width: `${val}%` }}
-                              />
+                            <div className="h-1.5 w-12 overflow-hidden rounded-full bg-surface-300">
+                              <div className={`h-full rounded-full ${barColor(val)}`} style={{ width: `${val}%` }} />
                             </div>
                           </div>
                         </td>
@@ -294,20 +297,21 @@ export default function VersionComparison({ analysis, versions }: Props) {
 
         {/* Best-of-each insights */}
         <div>
-          <h3 className="mb-3 text-sm font-semibold text-white">
-            💡 Best elements from each version
+          <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-white">
+            <Lightbulb className="h-4 w-4 text-brand-300" aria-hidden="true" />
+            Best elements from each version
           </h3>
           <div className="space-y-2">
-            {insights.map(({ icon, label, winner, tip }) => (
+            {insights.map(({ icon: Icon, label, winner, tip }) => (
               <div
                 key={label}
                 className="flex items-start gap-3 rounded-lg border border-surface-300 bg-surface-200 px-4 py-3"
               >
-                <span className="mt-0.5 text-base">{icon}</span>
+                <Icon className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
                 <div className="min-w-0">
                   <p className="text-sm text-white">
-                    <span className="font-semibold text-brand-300">{winner}</span>
-                    {" "}wins on <span className="font-medium">{label}</span>
+                    <span className="font-semibold text-brand-300">{winner}</span> wins on{" "}
+                    <span className="font-medium">{label}</span>
                   </p>
                   <p className="mt-0.5 text-xs text-gray-500">{tip}</p>
                 </div>
@@ -318,8 +322,9 @@ export default function VersionComparison({ analysis, versions }: Props) {
 
         {/* Final recommendation */}
         <div className="rounded-lg border border-brand-500/30 bg-brand-500/10 px-4 py-3">
-          <p className="text-sm font-semibold text-brand-300">
-            🏆 Recommendation: Publish {all[bestOverallIdx].label}
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-brand-300">
+            <Trophy className="h-4 w-4" aria-hidden="true" />
+            Recommendation: Publish {all[bestOverallIdx].label}
           </p>
           <p className="mt-1 text-xs text-gray-400">
             It scores the highest overall ({all[bestOverallIdx].totalScore}/100).
@@ -331,7 +336,7 @@ export default function VersionComparison({ analysis, versions }: Props) {
             <strong className="text-gray-300">{all[winners.mobile].label}</strong>.
           </p>
         </div>
-      </div>
+      </Card>
     </>
   );
 }

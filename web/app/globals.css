@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+  color-scheme: dark;
+}
+
 html,
 body {
   background-color: #0b0b14;
@@ -10,6 +14,20 @@ body {
 
 * {
   scrollbar-color: #393950 #15151f;
+}
+
+/* Respect the OS-level reduced-motion preference — Framer Motion
+   components read this via useReducedMotion() (see lib/motion.ts), and
+   this catches anything animated with plain CSS/Tailwind transitions too. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 .line-clamp-2 {

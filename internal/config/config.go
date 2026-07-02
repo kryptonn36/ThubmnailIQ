@@ -32,6 +32,17 @@ type Config struct {
 		RefreshTTL    time.Duration `mapstructure:"refresh_ttl"`
 	} `mapstructure:"jwt"`
 
+	// AdminJWT is a deliberately separate secret/TTL pair from JWT above, so
+	// admin session tokens can never be confused with — or forged from —
+	// customer session tokens, even though both are signed with the same
+	// pkg/jwt.Service implementation.
+	AdminJWT struct {
+		AccessSecret  string        `mapstructure:"access_secret"`
+		RefreshSecret string        `mapstructure:"refresh_secret"`
+		AccessTTL     time.Duration `mapstructure:"access_ttl"`
+		RefreshTTL    time.Duration `mapstructure:"refresh_ttl"`
+	} `mapstructure:"admin_jwt"`
+
 	S3 struct {
 		Endpoint        string `mapstructure:"endpoint"`
 		Region          string `mapstructure:"region"`
@@ -87,7 +98,7 @@ type Config struct {
 func Load() (*Config, error) {
 	err := godotenv.Load()
 	if err != nil {
-		return nil, fmt.Errorf("error in loading env file: %v",err)
+		return nil, fmt.Errorf("error in loading env file: %v", err)
 	}
 
 	v := viper.New()
@@ -105,6 +116,10 @@ func Load() (*Config, error) {
 	v.SetDefault("jwt.refresh_secret", "dev-refresh-secret-change-me")
 	v.SetDefault("jwt.access_ttl", "15m")
 	v.SetDefault("jwt.refresh_ttl", "168h")
+	v.SetDefault("admin_jwt.access_secret", "dev-admin-access-secret-change-me")
+	v.SetDefault("admin_jwt.refresh_secret", "dev-admin-refresh-secret-change-me")
+	v.SetDefault("admin_jwt.access_ttl", "15m")
+	v.SetDefault("admin_jwt.refresh_ttl", "168h")
 	// No default here on purpose: an empty endpoint means "use AWS's real
 	// endpoints" (production). Viper's AutomaticEnv treats an env var set
 	// to "" identically to one that's unset, so any non-empty default here

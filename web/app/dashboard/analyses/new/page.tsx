@@ -2,11 +2,18 @@
 
 import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
+import { Sparkles, Upload } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { useMotionVariants } from "@/lib/motion";
 import type { AnalysisCreateResponse } from "@/types";
 
 export default function NewAnalysisPage() {
   const router = useRouter();
+  const { fadeInUp } = useMotionVariants();
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [keyword, setKeyword] = useState("");
@@ -49,18 +56,16 @@ export default function NewAnalysisPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <motion.div initial="hidden" animate="visible" variants={fadeInUp} className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">New Analysis</h1>
-        <p className="mt-1 text-sm text-gray-400">
+        <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">New Analysis</h1>
+        <p className="mt-1.5 text-sm text-gray-400">
           Upload a thumbnail and target keyword to score it against real competitors.
         </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        {error && (
-          <p className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</p>
-        )}
+        {error && <Alert variant="danger">{error}</Alert>}
 
         <div
           onDragOver={(e) => {
@@ -70,7 +75,12 @@ export default function NewAnalysisPage() {
           onDragLeave={() => setDragActive(false)}
           onDrop={handleDrop}
           onClick={() => inputRef.current?.click()}
-          className={`flex min-h-[220px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-6 text-center transition ${
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
+          }}
+          className={`flex min-h-[220px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-6 text-center transition-colors duration-150 ${
             dragActive
               ? "border-brand-500 bg-brand-500/10"
               : "border-surface-300 bg-surface-100 hover:border-brand-500/50"
@@ -85,17 +95,13 @@ export default function NewAnalysisPage() {
           />
           {previewUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={previewUrl}
-              alt="Thumbnail preview"
-              className="max-h-48 rounded-lg object-contain"
-            />
+            <img src={previewUrl} alt="Thumbnail preview" className="max-h-48 rounded-lg object-contain" />
           ) : (
             <>
-              <span className="mb-2 text-3xl">📤</span>
-              <p className="text-sm font-medium text-gray-300">
-                Drag and drop your thumbnail here
-              </p>
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-brand-600/15 text-brand-300">
+                <Upload className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <p className="text-sm font-medium text-gray-300">Drag and drop your thumbnail here</p>
               <p className="mt-1 text-xs text-gray-500">
                 or click to browse — PNG/JPG, 1280×720 recommended
               </p>
@@ -104,28 +110,28 @@ export default function NewAnalysisPage() {
         </div>
 
         <div>
-          <label htmlFor="keyword" className="mb-1 block text-sm font-medium text-gray-300">
+          <label htmlFor="keyword" className="mb-1.5 block text-sm font-medium text-gray-300">
             Target keyword
           </label>
-          <input
+          <Input
             id="keyword"
             type="text"
             required
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="e.g. how to lose weight fast"
-            className="w-full rounded-lg border border-surface-300 bg-surface-200 px-3 py-2 text-sm text-white outline-none focus:border-brand-500"
           />
         </div>
 
-        <button
+        <Button
           type="submit"
-          disabled={submitting}
-          className="w-full rounded-lg bg-brand-gradient px-4 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:opacity-90 disabled:opacity-60"
+          loading={submitting}
+          icon={<Sparkles className="h-4 w-4" aria-hidden="true" />}
+          className="w-full"
         >
-          {submitting ? "Starting analysis..." : "Analyze Thumbnail"}
-        </button>
+          Analyze Thumbnail
+        </Button>
       </form>
-    </div>
+    </motion.div>
   );
 }

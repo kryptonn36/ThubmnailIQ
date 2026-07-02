@@ -75,13 +75,11 @@ export default function ScoreGauge({ score, size = 200 }: ScoreGaugeProps) {
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-4xl font-bold text-white">{Math.round(clamped)}</span>
-          <span className="text-xs uppercase tracking-wide text-gray-400">/ 100</span>
+          <span className="text-4xl font-bold tracking-tight text-white">{Math.round(clamped)}</span>
+          <span className="text-xs uppercase tracking-widest text-gray-500">/ 100</span>
         </div>
       </div>
-      <span
-        className={`rounded-full px-3 py-1 text-sm font-semibold ${band.bgClass} ${band.textClass}`}
-      >
+      <span className={`rounded-full px-3 py-1 text-sm font-semibold ${band.bgClass} ${band.textClass}`}>
         {band.label}
       </span>
     </div>

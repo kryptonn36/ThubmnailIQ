@@ -1,8 +1,29 @@
 "use client";
 
 import { useState } from "react";
-import { api, ApiError } from "@/lib/api";
 import Link from "next/link";
+import { motion } from "framer-motion";
+import {
+  BookOpen,
+  GraduationCap,
+  Lightbulb,
+  List,
+  Microscope,
+  Scale,
+  Trophy,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
+import { api, ApiError } from "@/lib/api";
+import { Alert } from "@/components/ui/Alert";
+import { Badge, type BadgeVariant } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Input } from "@/components/ui/Input";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { useMotionVariants } from "@/lib/motion";
 
 interface VideoIdea {
   title: string;
@@ -11,24 +32,25 @@ interface VideoIdea {
   ctr_potential: string;
 }
 
-const CTR_COLORS: Record<string, string> = {
-  "Very High": "text-green-400 bg-green-400/10",
-  High: "text-emerald-400 bg-emerald-400/10",
-  Medium: "text-yellow-400 bg-yellow-400/10",
-  Low: "text-gray-400 bg-gray-400/10",
+const CTR_BADGE: Record<string, BadgeVariant> = {
+  "Very High": "success",
+  High: "success",
+  Medium: "warning",
+  Low: "neutral",
 };
 
-const FORMAT_ICONS: Record<string, string> = {
-  Listicle: "📋",
-  "How-To": "🎓",
-  Story: "📖",
-  Challenge: "🏆",
-  Comparison: "⚖️",
-  "Case Study": "🔬",
-  Reaction: "😲",
+const FORMAT_ICONS: Record<string, LucideIcon> = {
+  Listicle: List,
+  "How-To": GraduationCap,
+  Story: BookOpen,
+  Challenge: Trophy,
+  Comparison: Scale,
+  "Case Study": Microscope,
+  Reaction: Zap,
 };
 
 export default function IdeasPage() {
+  const { fadeInUp, staggerContainer } = useMotionVariants();
   const [keyword, setKeyword] = useState("");
   const [ideas, setIdeas] = useState<VideoIdea[]>([]);
   const [loading, setLoading] = useState(false);
@@ -43,7 +65,7 @@ export default function IdeasPage() {
     setIdeas([]);
     try {
       const data = await api.get<{ ideas: VideoIdea[] }>(
-        `/keywords/${encodeURIComponent(keyword.trim())}/ideas`
+        `/keywords/${encodeURIComponent(keyword.trim())}/ideas`,
       );
       setIdeas(data.ideas);
       setSearched(keyword.trim());
@@ -56,42 +78,34 @@ export default function IdeasPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Video Ideas</h1>
-        <p className="mt-1 text-sm text-gray-400">
-          Enter a keyword to get AI-powered video ideas based on what&apos;s already working for top competitors.
-        </p>
-      </div>
+      <PageHeader
+        title="Video Ideas"
+        description="Enter a keyword to get AI-powered video ideas based on what's already working for top competitors."
+      />
 
       <form onSubmit={handleGenerate} className="flex gap-3">
-        <input
+        <Input
           type="text"
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           placeholder="e.g. crypto trading for beginners"
-          className="flex-1 rounded-xl border border-surface-300 bg-surface-100 px-4 py-3 text-sm text-white outline-none focus:border-brand-500 placeholder:text-gray-600"
+          className="flex-1"
         />
-        <button
-          type="submit"
-          disabled={loading || !keyword.trim()}
-          className="rounded-xl bg-brand-gradient px-6 py-3 text-sm font-semibold text-white shadow-glow transition hover:opacity-90 disabled:opacity-60"
-        >
-          {loading ? "Generating..." : "Generate Ideas"}
-        </button>
+        <Button type="submit" loading={loading} disabled={!keyword.trim()}>
+          Generate Ideas
+        </Button>
       </form>
 
-      {error && (
-        <p className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</p>
-      )}
+      {error && <Alert variant="danger">{error}</Alert>}
 
       {loading && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="animate-pulse rounded-2xl border border-surface-300 bg-surface-100 p-5 space-y-3">
-              <div className="h-4 w-3/4 rounded bg-surface-300" />
-              <div className="h-3 w-full rounded bg-surface-300" />
-              <div className="h-3 w-1/2 rounded bg-surface-300" />
-            </div>
+            <Card key={i} className="space-y-3">
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-1/2" />
+            </Card>
           ))}
         </div>
       )}
@@ -101,45 +115,52 @@ export default function IdeasPage() {
           <p className="text-sm text-gray-500">
             {ideas.length} ideas generated for &ldquo;<span className="text-white">{searched}</span>&rdquo;
           </p>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {ideas.map((idea, i) => (
-              <div
-                key={i}
-                className="flex flex-col rounded-2xl border border-surface-300 bg-surface-100 p-5 transition hover:border-brand-500/50"
-              >
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="text-lg">{FORMAT_ICONS[idea.format] ?? "💡"}</span>
-                  <span className="rounded-full bg-surface-300 px-2 py-0.5 text-xs text-gray-300">
-                    {idea.format}
-                  </span>
-                  <span className={`ml-auto rounded-full px-2 py-0.5 text-xs font-medium ${CTR_COLORS[idea.ctr_potential] ?? "text-gray-400 bg-gray-400/10"}`}>
-                    {idea.ctr_potential} CTR
-                  </span>
-                </div>
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            variants={staggerContainer}
+            className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+          >
+            {ideas.map((idea, i) => {
+              const Icon = FORMAT_ICONS[idea.format] ?? Lightbulb;
+              return (
+                <motion.div key={i} variants={fadeInUp}>
+                  <Card hover className="flex h-full flex-col">
+                    <div className="mb-3 flex items-center gap-2">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-600/15 text-brand-300">
+                        <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                      </span>
+                      <span className="rounded-full bg-surface-300 px-2 py-0.5 text-xs text-gray-300">
+                        {idea.format}
+                      </span>
+                      <Badge variant={CTR_BADGE[idea.ctr_potential] ?? "neutral"} className="ml-auto">
+                        {idea.ctr_potential} CTR
+                      </Badge>
+                    </div>
 
-                <h3 className="mb-2 text-sm font-semibold leading-snug text-white">{idea.title}</h3>
-                <p className="flex-1 text-xs leading-relaxed text-gray-400">{idea.hook}</p>
+                    <h3 className="mb-2 text-sm font-semibold leading-snug text-white">{idea.title}</h3>
+                    <p className="flex-1 text-xs leading-relaxed text-gray-400">{idea.hook}</p>
 
-                <Link
-                  href={`/dashboard/analyses/new?keyword=${encodeURIComponent(idea.title)}`}
-                  className="mt-4 block rounded-lg border border-surface-300 py-2 text-center text-xs font-medium text-gray-300 transition hover:border-brand-500 hover:text-brand-300"
-                >
-                  Use this idea →
-                </Link>
-              </div>
-            ))}
-          </div>
+                    <Link
+                      href={`/dashboard/analyses/new?keyword=${encodeURIComponent(idea.title)}`}
+                      className="mt-4 block rounded-lg border border-surface-300 py-2 text-center text-xs font-medium text-gray-300 transition-colors duration-150 hover:border-brand-500 hover:text-brand-300"
+                    >
+                      Use this idea →
+                    </Link>
+                  </Card>
+                </motion.div>
+              );
+            })}
+          </motion.div>
         </>
       )}
 
       {!loading && ideas.length === 0 && !error && (
-        <div className="rounded-2xl border border-dashed border-surface-300 p-14 text-center">
-          <p className="text-4xl mb-3">💡</p>
-          <p className="font-medium text-gray-300">Enter a keyword to generate video ideas</p>
-          <p className="mt-1 text-sm text-gray-500">
-            We study your top competitors&apos; titles and use AI to suggest original angles that stand out.
-          </p>
-        </div>
+        <EmptyState
+          icon={<Lightbulb className="h-5 w-5" aria-hidden="true" />}
+          title="Enter a keyword to generate video ideas"
+          description="We study your top competitors' titles and use AI to suggest original angles that stand out."
+        />
       )}
     </div>
   );

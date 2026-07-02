@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { X } from "lucide-react";
 
 interface ImageLightboxProps {
   src: string;
@@ -18,24 +20,36 @@ export default function ImageLightbox({ src, alt, onClose }: ImageLightboxProps)
   }, [onClose]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-      onClick={onClose}
-    >
-      <button
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.15 }}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
         onClick={onClose}
-        aria-label="Close"
-        className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-surface-200 text-xl text-gray-300 transition hover:bg-surface-300"
+        role="dialog"
+        aria-modal="true"
+        aria-label={alt}
       >
-        &times;
-      </button>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={src}
-        alt={alt}
-        className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain"
-        onClick={(e) => e.stopPropagation()}
-      />
-    </div>
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-surface-200 text-gray-300 transition-colors duration-150 hover:bg-surface-300 hover:text-white"
+        >
+          <X className="h-5 w-5" aria-hidden="true" />
+        </button>
+        <motion.img
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.95, opacity: 0 }}
+          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          src={src}
+          alt={alt}
+          className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain"
+          onClick={(e) => e.stopPropagation()}
+        />
+      </motion.div>
+    </AnimatePresence>
   );
 }

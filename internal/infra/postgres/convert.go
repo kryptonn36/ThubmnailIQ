@@ -64,6 +64,14 @@ func int8Val(i pgtype.Int8) int64 {
 	return i.Int64
 }
 
+func int8Ptr(i pgtype.Int8) *int64 {
+	if !i.Valid {
+		return nil
+	}
+	v := i.Int64
+	return &v
+}
+
 func uuidOrNil(id *uuid.UUID) pgtype.UUID {
 	if id == nil {
 		return pgtype.UUID{}
@@ -96,6 +104,13 @@ func tsPtr(t pgtype.Timestamptz) *time.Time {
 
 func tsNow(t time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: t, Valid: true}
+}
+
+func dateStr(d pgtype.Date) string {
+	if !d.Valid {
+		return ""
+	}
+	return d.Time.Format("2006-01-02")
 }
 
 func float8OrNil(f *float64) pgtype.Float8 {

@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { motion } from "framer-motion";
+import { Check, Copy, CreditCard, KeyRound } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import type {
   BillingPlan,
@@ -10,6 +12,14 @@ import type {
   APIKey,
   CreatedAPIKey,
 } from "@/types";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Input } from "@/components/ui/Input";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { useMotionVariants } from "@/lib/motion";
 
 declare global {
   interface Window {
@@ -34,6 +44,7 @@ function loadRazorpayScript(): Promise<void> {
 }
 
 export default function BillingPage() {
+  const { fadeInUp, staggerContainer } = useMotionVariants();
   const [plans, setPlans] = useState<BillingPlan[]>([]);
   const [currentSub, setCurrentSub] = useState<CurrentSubscriptionResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -115,7 +126,7 @@ export default function BillingPage() {
     return () => {
       cancelled = true;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const currentPlanDef = plans.find((p) => p.id === currentSub?.plan);
@@ -175,35 +186,39 @@ export default function BillingPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Billing</h1>
-        <p className="mt-1 text-sm text-gray-400">
-          Choose the plan that fits your workspace.
-        </p>
-      </div>
+      <PageHeader title="Billing" description="Choose the plan that fits your workspace." />
 
       {currentSub && (
-        <p className="rounded-lg bg-surface-100 border border-surface-300 px-4 py-3 text-sm text-gray-300">
+        <Card className="text-sm text-gray-300">
           You&apos;re on the <span className="font-semibold text-white">{currentPlanDef?.name ?? currentSub.plan}</span> plan
           {currentSub.is_active && currentSub.current_period_end && currentSub.plan !== "free" && (
             <> &middot; valid until {new Date(currentSub.current_period_end).toLocaleDateString()}</>
           )}
-        </p>
+        </Card>
       )}
 
-      {message && (
-        <p className="rounded-lg bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">
-          {message}
-        </p>
-      )}
-      {error && (
-        <p className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</p>
-      )}
+      {message && <Alert variant="success">{message}</Alert>}
+      {error && <Alert variant="danger">{error}</Alert>}
 
       {loading ? (
-        <p className="text-sm text-gray-500">Loading plans...</p>
-      ) : (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i} className="space-y-3">
+              <Skeleton className="h-5 w-1/2" />
+              <Skeleton className="h-8 w-1/3" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <motion.div
+          initial="hidden"
+          animate="visible"
+          variants={staggerContainer}
+          className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4"
+        >
           {plans.map((plan) => {
             const isCurrent = currentSub?.is_active && currentSub.plan === plan.id;
             const isUpgrade =
@@ -219,108 +234,95 @@ export default function BillingPage() {
             const upgradePrice = isUpgrade ? plan.price_monthly - currentPlanDef!.price_monthly : null;
 
             return (
-              <div
-                key={plan.id}
-                className={`flex flex-col rounded-2xl border p-6 ${
-                  isCurrent
-                    ? "border-brand-500 shadow-glow"
-                    : "border-surface-300 bg-surface-100"
-                }`}
-              >
-                <h2 className="text-lg font-semibold text-white">{plan.name}</h2>
-                <p className="mt-2 text-3xl font-bold text-white">
-                  ${plan.price_monthly}
-                  <span className="text-sm font-normal text-gray-500">/mo</span>
-                </p>
-                <ul className="mt-4 flex-1 space-y-2 text-sm text-gray-400">
-                  <li>{plan.analyses_limit} analyses / month</li>
-                  <li>{plan.api_requests_limit} API requests / month</li>
-                  {plan.features.map((feature) => (
-                    <li key={feature}>{feature}</li>
-                  ))}
-                </ul>
-                <button
-                  onClick={() => handleSubscribe(plan.id)}
-                  disabled={isCurrent || isDowngrade || subscribing === plan.id}
-                  title={isDowngrade ? "Downgrades aren't available while your current plan is active" : undefined}
-                  className={`mt-6 rounded-lg px-4 py-2.5 text-sm font-semibold transition disabled:opacity-60 ${
-                    isCurrent || isDowngrade
-                      ? "bg-surface-300 text-gray-300"
-                      : "bg-brand-gradient text-white shadow-glow hover:opacity-90"
-                  }`}
+              <motion.div key={plan.id} variants={fadeInUp}>
+                <Card
+                  accent={isCurrent}
+                  className={`flex h-full flex-col ${isCurrent ? "border-brand-500 shadow-glow" : ""}`}
                 >
-                  {subscribing === plan.id
-                    ? "Processing..."
-                    : isCurrent
-                    ? "Current Plan"
-                    : isDowngrade
-                    ? "Unavailable"
-                    : isUpgrade
-                    ? `Upgrade for $${upgradePrice}/mo`
-                    : "Subscribe"}
-                </button>
-              </div>
+                  <h2 className="text-lg font-semibold text-white">{plan.name}</h2>
+                  <p className="mt-2 text-3xl font-bold tracking-tight text-white">
+                    ${plan.price_monthly}
+                    <span className="text-sm font-normal text-gray-500">/mo</span>
+                  </p>
+                  <ul className="mt-4 flex-1 space-y-2 text-sm text-gray-400">
+                    <li>{plan.analyses_limit} analyses / month</li>
+                    <li>{plan.api_requests_limit} API requests / month</li>
+                    {plan.features.map((feature) => (
+                      <li key={feature}>{feature}</li>
+                    ))}
+                  </ul>
+                  <Button
+                    variant={isCurrent || isDowngrade ? "secondary" : "primary"}
+                    onClick={() => handleSubscribe(plan.id)}
+                    disabled={isCurrent || isDowngrade}
+                    loading={subscribing === plan.id}
+                    title={isDowngrade ? "Downgrades aren't available while your current plan is active" : undefined}
+                    className="mt-6 w-full"
+                  >
+                    {isCurrent
+                      ? "Current Plan"
+                      : isDowngrade
+                        ? "Unavailable"
+                        : isUpgrade
+                          ? `Upgrade for $${upgradePrice}/mo`
+                          : "Subscribe"}
+                  </Button>
+                </Card>
+              </motion.div>
             );
           })}
-        </div>
+        </motion.div>
       )}
 
       {/* ── API Keys ── */}
       <div className="space-y-4">
         <div>
-          <h2 className="text-xl font-bold text-white">API Keys</h2>
+          <h2 className="text-xl font-bold tracking-tight text-white">API Keys</h2>
           <p className="mt-1 text-sm text-gray-400">
             Use an API key to authenticate the browser extension or any other integration. The raw key is shown only once — copy it immediately.
           </p>
         </div>
 
-        {/* Create new key */}
-        <form
-          onSubmit={handleCreateKey}
-          className="rounded-2xl border border-surface-300 bg-surface-100 p-5"
-        >
+        <Card as="form" onSubmit={handleCreateKey}>
           <h3 className="mb-3 text-sm font-semibold text-white">Create a new key</h3>
           <div className="flex gap-3">
-            <input
+            <Input
               type="text"
               value={newKeyName}
               onChange={(e) => setNewKeyName(e.target.value)}
               placeholder="e.g. Chrome Extension"
-              className="flex-1 rounded-lg border border-surface-300 bg-surface-200 px-3 py-2 text-sm text-white outline-none focus:border-brand-500 placeholder:text-gray-600"
+              className="flex-1"
             />
-            <button
-              type="submit"
-              disabled={creatingKey || !newKeyName.trim()}
-              className="rounded-lg bg-brand-gradient px-5 py-2 text-sm font-semibold text-white shadow-glow transition hover:opacity-90 disabled:opacity-60"
-            >
-              {creatingKey ? "Creating…" : "Create Key"}
-            </button>
+            <Button type="submit" loading={creatingKey} disabled={!newKeyName.trim()} icon={<KeyRound className="h-4 w-4" aria-hidden="true" />}>
+              Create Key
+            </Button>
           </div>
-          {keyError && <p className="mt-2 text-xs text-red-400">{keyError}</p>}
-        </form>
+          {keyError && <p className="mt-2 text-xs text-danger">{keyError}</p>}
+        </Card>
 
-        {/* Newly created key — show raw value once */}
         {createdKey && (
-          <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-5">
-            <p className="mb-1 text-sm font-semibold text-emerald-300">
-              ✓ Key created — copy it now, it won&apos;t be shown again
+          <Card className="border-success/40 bg-success/10">
+            <p className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-success">
+              <Check className="h-4 w-4" aria-hidden="true" />
+              Key created — copy it now, it won&apos;t be shown again
             </p>
             <div className="mt-2 flex items-center gap-2">
-              <code className="flex-1 break-all rounded-lg border border-emerald-500/30 bg-black/30 px-3 py-2 font-mono text-xs text-emerald-300">
+              <code className="flex-1 break-all rounded-lg border border-success/30 bg-black/30 px-3 py-2 font-mono text-xs text-success">
                 {createdKey.key}
               </code>
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="sm"
                 onClick={() => copyKey(createdKey.key)}
-                className="shrink-0 rounded-lg border border-emerald-500/40 px-3 py-2 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/10"
+                icon={<Copy className="h-3.5 w-3.5" aria-hidden="true" />}
               >
-                {keyCopied ? "Copied ✓" : "Copy"}
-              </button>
+                {keyCopied ? "Copied" : "Copy"}
+              </Button>
             </div>
-          </div>
+          </Card>
         )}
 
-        {/* Existing keys list */}
         {apiKeys.length > 0 ? (
           <div className="space-y-2">
             {apiKeys.map((k) => (
@@ -330,31 +332,27 @@ export default function BillingPage() {
               >
                 <div>
                   <p className="text-sm font-medium text-white">{k.name}</p>
-                  <p className="mt-0.5 font-mono text-xs text-gray-500">
-                    {k.key_prefix}••••••••
-                  </p>
+                  <p className="mt-0.5 font-mono text-xs text-gray-500">{k.key_prefix}••••••••</p>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="text-right text-xs text-gray-500">
                     <p>{k.requests_this_month} / {k.requests_limit} requests</p>
                     <p>Created {new Date(k.created_at).toLocaleDateString()}</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleRevokeKey(k.id)}
-                    className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 transition hover:bg-red-500/20"
-                  >
+                  <Button variant="danger" size="sm" onClick={() => handleRevokeKey(k.id)}>
                     Revoke
-                  </button>
+                  </Button>
                 </div>
               </div>
             ))}
           </div>
         ) : (
           !loading && (
-            <p className="rounded-xl border border-dashed border-surface-300 px-4 py-6 text-center text-sm text-gray-500">
-              No API keys yet. Create one above to connect the browser extension or external tools.
-            </p>
+            <EmptyState
+              icon={<CreditCard className="h-5 w-5" aria-hidden="true" />}
+              title="No API keys yet."
+              description="Create one above to connect the browser extension or external tools."
+            />
           )
         )}
       </div>

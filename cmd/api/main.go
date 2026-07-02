@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/hibiken/asynq"
+	goredis "github.com/redis/go-redis/v9"
 
 	"github.com/thumbnailiq/thumbnailiq/internal/config"
 	"github.com/thumbnailiq/thumbnailiq/internal/domain/payment"
@@ -12,12 +13,15 @@ import (
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/cdn"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/cv"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/gemini"
+	"github.com/thumbnailiq/thumbnailiq/internal/infra/health"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/payment/razorpay"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/payment/stripe"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/postgres"
+	"github.com/thumbnailiq/thumbnailiq/internal/infra/redis"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/s3"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/youtube"
 	"github.com/thumbnailiq/thumbnailiq/internal/server"
+	adminuc "github.com/thumbnailiq/thumbnailiq/internal/usecase/admin"
 	analysisuc "github.com/thumbnailiq/thumbnailiq/internal/usecase/analysis"
 	billinguc "github.com/thumbnailiq/thumbnailiq/internal/usecase/billing"
 	trackinguc "github.com/thumbnailiq/thumbnailiq/internal/usecase/tracking"
@@ -90,14 +94,23 @@ func main() {
 	queueClient := asynq.NewClient(asynq.RedisClientOpt{Addr: cfg.Redis.Addr, Password: cfg.Redis.Password, DB: cfg.Redis.DB})
 	defer queueClient.Close()
 
+	redisClient := goredis.NewClient(&goredis.Options{Addr: cfg.Redis.Addr, Password: cfg.Redis.Password, DB: cfg.Redis.DB})
+	defer redisClient.Close()
+	rateLimiter := redis.NewRateLimiter(redisClient)
+	healthChecker := health.NewChecker(pool, redisClient, cvClient)
+
 	userRepo := postgres.NewUserRepo(pool)
 	workspaceRepo := postgres.NewWorkspaceRepo(pool)
 	analysisRepo := postgres.NewAnalysisRepo(pool)
 	competitorRepo := postgres.NewCompetitorRepo(pool)
 	billingRepo := postgres.NewBillingRepo(pool)
 	viralDBRepo := postgres.NewViralDBRepo(pool)
+	adminRepo := postgres.NewAdminRepo(pool)
 
 	jwtSvc := jwt.NewService(cfg.JWT.AccessSecret, cfg.JWT.RefreshSecret, cfg.JWT.AccessTTL, cfg.JWT.RefreshTTL)
+	// A distinct *jwt.Service instance (own secrets) so admin and customer
+	// tokens can never be parsed as one another.
+	adminJWTSvc := jwt.NewService(cfg.AdminJWT.AccessSecret, cfg.AdminJWT.RefreshSecret, cfg.AdminJWT.AccessTTL, cfg.AdminJWT.RefreshTTL)
 
 	userUC := useruc.NewUsecase(userRepo, workspaceRepo, jwtSvc)
 	workspaceUC := workspaceuc.NewUsecase(workspaceRepo, userRepo)
@@ -105,19 +118,28 @@ func main() {
 	billingUC := billinguc.NewUsecase(billingRepo, workspaceRepo, gateway, cfg.Payment.Currency)
 	trackingUC := trackinguc.NewUsecase(competitorRepo)
 	viralDBUC := viraldbuc.NewUsecase(viralDBRepo)
+	adminUC := adminuc.NewUsecase(adminRepo, adminJWTSvc, healthChecker)
 
 	handlers := &server.Handlers{
-		Auth:         handler.NewAuthHandler(userUC),
-		Workspace:    handler.NewWorkspaceHandler(workspaceUC),
-		Analysis:     handler.NewAnalysisHandler(analysisUC, competitorRepo, workspaceUC, cdnBuilder),
-		Competitor:   handler.NewCompetitorHandler(ytFetcher, geminiClient),
-		Tracking:     handler.NewTrackingHandler(trackingUC, workspaceUC),
-		Billing:      handler.NewBillingHandler(billingUC, workspaceUC),
-		ViralDB:      handler.NewViralDBHandler(viralDBUC),
-		QuickAnalyze: handler.NewQuickAnalyzeHandler(cvClient),
+		Auth:           handler.NewAuthHandler(userUC),
+		Workspace:      handler.NewWorkspaceHandler(workspaceUC),
+		Analysis:       handler.NewAnalysisHandler(analysisUC, competitorRepo, workspaceUC, cdnBuilder),
+		Competitor:     handler.NewCompetitorHandler(ytFetcher, geminiClient),
+		Tracking:       handler.NewTrackingHandler(trackingUC, workspaceUC),
+		Billing:        handler.NewBillingHandler(billingUC, workspaceUC),
+		ViralDB:        handler.NewViralDBHandler(viralDBUC),
+		QuickAnalyze:   handler.NewQuickAnalyzeHandler(cvClient),
+		AdminAuth:      handler.NewAdminAuthHandler(adminUC),
+		AdminDashboard: handler.NewAdminDashboardHandler(adminUC),
+		AdminUsers:     handler.NewAdminUsersHandler(adminUC),
+		AdminUploads:   handler.NewAdminUploadsHandler(adminUC, cdnBuilder),
+		AdminAnalytics: handler.NewAdminAnalyticsHandler(adminUC),
+		AdminSettings:  handler.NewAdminSettingsHandler(adminUC),
+		AdminLogs:      handler.NewAdminLogsHandler(adminUC),
+		AdminProfile:   handler.NewAdminProfileHandler(adminUC),
 	}
 
-	router := server.NewRouter(handlers, jwtSvc, billingRepo, log)
+	router := server.NewRouter(handlers, jwtSvc, adminJWTSvc, billingRepo, rateLimiter, log)
 
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	log.Info().Str("addr", addr).Msg("starting ThumbnailIQ API server")

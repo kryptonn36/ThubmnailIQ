@@ -15,32 +15,33 @@ const (
 )
 
 type Analysis struct {
-	ID                uuid.UUID
-	WorkspaceID       uuid.UUID
-	ProjectID         *uuid.UUID
-	UserID            uuid.UUID
-	Keyword           string
-	ThumbnailS3Key    string
-	Status            string
-	ErrorMessage      string
-	Score             *int
-	VisibilityScore   *int
-	ContrastScore     *int
-	AttentionScore    *int
-	MobileScore       *int
-	BrandingScore     *int
-	CuriosityScore    *int
-	CVResults         []byte
-	CompetitorAvg     []byte
-	Suggestions       []byte
-	CompetitorCount   int
-	RankInCompetitors *int
-	RelevanceScore    *int
+	ID                 uuid.UUID
+	WorkspaceID        uuid.UUID
+	ProjectID          *uuid.UUID
+	UserID             uuid.UUID
+	Keyword            string
+	ThumbnailS3Key     string
+	Status             string
+	ErrorMessage       string
+	Score              *int
+	VisibilityScore    *int
+	ContrastScore      *int
+	AttentionScore     *int
+	MobileScore        *int
+	BrandingScore      *int
+	CuriosityScore     *int
+	CVResults          []byte
+	CompetitorAvg      []byte
+	Suggestions        []byte
+	CompetitorCount    int
+	RankInCompetitors  *int
+	RelevanceScore     *int
 	RelevanceReasoning string
 	ActualCTR          *float64
 	PublishedAt        *time.Time
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	FileSizeBytes      *int64
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 type ThumbnailVersion struct {
@@ -50,6 +51,7 @@ type ThumbnailVersion struct {
 	S3Key         string
 	Score         *int
 	CVResults     []byte
+	FileSizeBytes *int64
 	CreatedAt     time.Time
 }
 

@@ -9,6 +9,38 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AdminAuditLog struct {
+	ID         uuid.UUID          `json:"id"`
+	AdminID    uuid.UUID          `json:"admin_id"`
+	Action     string             `json:"action"`
+	TargetType string             `json:"target_type"`
+	TargetID   string             `json:"target_id"`
+	Metadata   []byte             `json:"metadata"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
+type AdminRefreshToken struct {
+	ID         uuid.UUID          `json:"id"`
+	AdminID    uuid.UUID          `json:"admin_id"`
+	TokenHash  string             `json:"token_hash"`
+	DeviceInfo pgtype.Text        `json:"device_info"`
+	IsRevoked  bool               `json:"is_revoked"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
+type AdminUser struct {
+	ID           uuid.UUID          `json:"id"`
+	Email        string             `json:"email"`
+	PasswordHash string             `json:"password_hash"`
+	FullName     string             `json:"full_name"`
+	Role         string             `json:"role"`
+	IsActive     bool               `json:"is_active"`
+	LastLoginAt  pgtype.Timestamptz `json:"last_login_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Analysis struct {
 	ID                 uuid.UUID          `json:"id"`
 	WorkspaceID        uuid.UUID          `json:"workspace_id"`
@@ -39,6 +71,7 @@ type Analysis struct {
 	RelevanceReasoning pgtype.Text        `json:"relevance_reasoning"`
 	ActualCtr          pgtype.Float8      `json:"actual_ctr"`
 	PublishedAt        pgtype.Timestamptz `json:"published_at"`
+	FileSizeBytes      pgtype.Int8        `json:"file_size_bytes"`
 }
 
 type ApiKey struct {
@@ -54,6 +87,17 @@ type ApiKey struct {
 	CreatedBy         uuid.UUID          `json:"created_by"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	RevokedAt         pgtype.Timestamptz `json:"revoked_at"`
+}
+
+type AppSetting struct {
+	ID                 int16              `json:"id"`
+	MaxUploadSizeBytes int64              `json:"max_upload_size_bytes"`
+	AllowedExtensions  []string           `json:"allowed_extensions"`
+	FeatureFlags       []byte             `json:"feature_flags"`
+	StorageProvider    string             `json:"storage_provider"`
+	EmailProvider      string             `json:"email_provider"`
+	EmailFromAddress   string             `json:"email_from_address"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Comment struct {
@@ -136,6 +180,7 @@ type ThumbnailVersion struct {
 	CvResults        []byte             `json:"cv_results"`
 	IsSelectedWinner pgtype.Bool        `json:"is_selected_winner"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	FileSizeBytes    pgtype.Int8        `json:"file_size_bytes"`
 }
 
 type TrackingJob struct {
@@ -165,6 +210,7 @@ type User struct {
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
+	Status           string             `json:"status"`
 }
 
 type ViralThumbnail struct {

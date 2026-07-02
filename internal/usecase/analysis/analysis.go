@@ -60,12 +60,14 @@ func (u *Usecase) Create(ctx context.Context, p CreateParams) (*analysis.Analysi
 		return nil, err
 	}
 
+	fileSize := int64(len(p.FileBytes))
 	created, err := u.analyses.Create(ctx, &analysis.Analysis{
 		WorkspaceID:    p.WorkspaceID,
 		ProjectID:      p.ProjectID,
 		UserID:         p.UserID,
 		Keyword:        validator.NormalizeKeyword(p.Keyword),
 		ThumbnailS3Key: key,
+		FileSizeBytes:  &fileSize,
 	})
 	if err != nil {
 		return nil, err
@@ -142,9 +144,10 @@ func (u *Usecase) AddCompareVersion(ctx context.Context, analysisID uuid.UUID, f
 	final := u.engine.FinalScore(sub)
 
 	cvJSON, _ := json.Marshal(cvResult)
+	fileSize := int64(len(fileBytes))
 	version, err := u.analyses.CreateVersion(ctx, &analysis.ThumbnailVersion{
 		AnalysisID: analysisID, VersionNumber: versionNum, S3Key: key,
-		Score: &final, CVResults: cvJSON,
+		Score: &final, CVResults: cvJSON, FileSizeBytes: &fileSize,
 	})
 	if err != nil {
 		return nil, err

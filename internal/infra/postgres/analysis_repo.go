@@ -25,36 +25,41 @@ func NewAnalysisRepo(pool *pgxpool.Pool) *AnalysisRepo {
 
 func toDomainAnalysis(a db.Analysis) *analysis.Analysis {
 	return &analysis.Analysis{
-		ID:                a.ID,
-		WorkspaceID:       a.WorkspaceID,
-		ProjectID:         uuidPtr(a.ProjectID),
-		UserID:            a.UserID,
-		Keyword:           a.Keyword,
-		ThumbnailS3Key:    a.ThumbnailS3Key,
-		Status:            a.Status,
-		ErrorMessage:      textVal(a.ErrorMessage),
-		Score:             int4Ptr(a.Score),
-		VisibilityScore:   int4Ptr(a.VisibilityScore),
-		ContrastScore:     int4Ptr(a.ContrastScore),
-		AttentionScore:    int4Ptr(a.AttentionScore),
-		MobileScore:       int4Ptr(a.MobileScore),
-		BrandingScore:     int4Ptr(a.BrandingScore),
-		CuriosityScore:    int4Ptr(a.CuriosityScore),
-		CVResults:         a.CvResults,
-		CompetitorAvg:     a.CompetitorAvg,
-		Suggestions:       a.Suggestions,
-		CompetitorCount:   int4Val(a.CompetitorCount),
-		RankInCompetitors: int4Ptr(a.RankInCompetitors),
+		ID:                 a.ID,
+		WorkspaceID:        a.WorkspaceID,
+		ProjectID:          uuidPtr(a.ProjectID),
+		UserID:             a.UserID,
+		Keyword:            a.Keyword,
+		ThumbnailS3Key:     a.ThumbnailS3Key,
+		Status:             a.Status,
+		ErrorMessage:       textVal(a.ErrorMessage),
+		Score:              int4Ptr(a.Score),
+		VisibilityScore:    int4Ptr(a.VisibilityScore),
+		ContrastScore:      int4Ptr(a.ContrastScore),
+		AttentionScore:     int4Ptr(a.AttentionScore),
+		MobileScore:        int4Ptr(a.MobileScore),
+		BrandingScore:      int4Ptr(a.BrandingScore),
+		CuriosityScore:     int4Ptr(a.CuriosityScore),
+		CVResults:          a.CvResults,
+		CompetitorAvg:      a.CompetitorAvg,
+		Suggestions:        a.Suggestions,
+		CompetitorCount:    int4Val(a.CompetitorCount),
+		RankInCompetitors:  int4Ptr(a.RankInCompetitors),
 		RelevanceScore:     int4Ptr(a.RelevanceScore),
 		RelevanceReasoning: textVal(a.RelevanceReasoning),
 		ActualCTR:          float8Ptr(a.ActualCtr),
 		PublishedAt:        tsPtr(a.PublishedAt),
+		FileSizeBytes:      int8Ptr(a.FileSizeBytes),
 		CreatedAt:          tsVal(a.CreatedAt),
-		UpdatedAt:         tsVal(a.UpdatedAt),
+		UpdatedAt:          tsVal(a.UpdatedAt),
 	}
 }
 
 func (r *AnalysisRepo) Create(ctx context.Context, a *analysis.Analysis) (*analysis.Analysis, error) {
+	var fileSize int64
+	if a.FileSizeBytes != nil {
+		fileSize = *a.FileSizeBytes
+	}
 	created, err := r.q.CreateAnalysis(ctx, db.CreateAnalysisParams{
 		WorkspaceID:       a.WorkspaceID,
 		ProjectID:         uuidOrNil(a.ProjectID),
@@ -62,6 +67,7 @@ func (r *AnalysisRepo) Create(ctx context.Context, a *analysis.Analysis) (*analy
 		Keyword:           a.Keyword,
 		KeywordNormalized: a.Keyword,
 		ThumbnailS3Key:    a.ThumbnailS3Key,
+		FileSizeBytes:     int8OrNil(fileSize),
 	})
 	if err != nil {
 		return nil, err
@@ -116,19 +122,19 @@ func (r *AnalysisRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status, e
 
 func (r *AnalysisRepo) UpdateResults(ctx context.Context, a *analysis.Analysis) error {
 	_, err := r.q.UpdateAnalysisResults(ctx, db.UpdateAnalysisResultsParams{
-		ID:                a.ID,
-		Score:             int4OrNil(a.Score),
-		VisibilityScore:   int4OrNil(a.VisibilityScore),
-		ContrastScore:     int4OrNil(a.ContrastScore),
-		AttentionScore:    int4OrNil(a.AttentionScore),
-		MobileScore:       int4OrNil(a.MobileScore),
-		BrandingScore:     int4OrNil(a.BrandingScore),
-		CuriosityScore:    int4OrNil(a.CuriosityScore),
-		CvResults:         a.CVResults,
-		CompetitorAvg:     a.CompetitorAvg,
-		Suggestions:       a.Suggestions,
-		CompetitorCount:   int4OrNil(&a.CompetitorCount),
-		RankInCompetitors: int4OrNil(a.RankInCompetitors),
+		ID:                 a.ID,
+		Score:              int4OrNil(a.Score),
+		VisibilityScore:    int4OrNil(a.VisibilityScore),
+		ContrastScore:      int4OrNil(a.ContrastScore),
+		AttentionScore:     int4OrNil(a.AttentionScore),
+		MobileScore:        int4OrNil(a.MobileScore),
+		BrandingScore:      int4OrNil(a.BrandingScore),
+		CuriosityScore:     int4OrNil(a.CuriosityScore),
+		CvResults:          a.CVResults,
+		CompetitorAvg:      a.CompetitorAvg,
+		Suggestions:        a.Suggestions,
+		CompetitorCount:    int4OrNil(&a.CompetitorCount),
+		RankInCompetitors:  int4OrNil(a.RankInCompetitors),
 		RelevanceScore:     int4OrNil(a.RelevanceScore),
 		RelevanceReasoning: textOrNil(a.RelevanceReasoning),
 	})
@@ -136,12 +142,17 @@ func (r *AnalysisRepo) UpdateResults(ctx context.Context, a *analysis.Analysis) 
 }
 
 func (r *AnalysisRepo) CreateVersion(ctx context.Context, v *analysis.ThumbnailVersion) (*analysis.ThumbnailVersion, error) {
+	var fileSize int64
+	if v.FileSizeBytes != nil {
+		fileSize = *v.FileSizeBytes
+	}
 	created, err := r.q.CreateThumbnailVersion(ctx, db.CreateThumbnailVersionParams{
 		AnalysisID:    v.AnalysisID,
 		VersionNumber: int32(v.VersionNumber),
 		S3Key:         v.S3Key,
 		Score:         int4OrNil(v.Score),
 		CvResults:     v.CVResults,
+		FileSizeBytes: int8OrNil(fileSize),
 	})
 	if err != nil {
 		return nil, err
@@ -149,7 +160,8 @@ func (r *AnalysisRepo) CreateVersion(ctx context.Context, v *analysis.ThumbnailV
 	return &analysis.ThumbnailVersion{
 		ID: created.ID, AnalysisID: created.AnalysisID, VersionNumber: int(created.VersionNumber),
 		S3Key: created.S3Key, Score: int4Ptr(created.Score),
-		CVResults: created.CvResults, CreatedAt: tsVal(created.CreatedAt),
+		CVResults: created.CvResults, FileSizeBytes: int8Ptr(created.FileSizeBytes),
+		CreatedAt: tsVal(created.CreatedAt),
 	}, nil
 }
 
@@ -163,7 +175,8 @@ func (r *AnalysisRepo) ListVersions(ctx context.Context, analysisID uuid.UUID) (
 		out = append(out, &analysis.ThumbnailVersion{
 			ID: v.ID, AnalysisID: v.AnalysisID, VersionNumber: int(v.VersionNumber),
 			S3Key: v.S3Key, Score: int4Ptr(v.Score),
-			CVResults: v.CvResults, CreatedAt: tsVal(v.CreatedAt),
+			CVResults: v.CvResults, FileSizeBytes: int8Ptr(v.FileSizeBytes),
+			CreatedAt: tsVal(v.CreatedAt),
 		})
 	}
 	return out, nil

@@ -2,14 +2,39 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { motion } from "framer-motion";
+import {
+  Clock,
+  Flame,
+  Image as ImageIcon,
+  Lightbulb,
+  Plus,
+  Radar,
+  type LucideIcon,
+} from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { getScoreBand } from "@/components/ScoreGauge";
+import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { useMotionVariants } from "@/lib/motion";
 import type { AnalysisSummary, PaginatedResponse, Workspace } from "@/types";
 
-const QUICK_ACTIONS = [
+const QUICK_ACTIONS: {
+  href: string;
+  icon: LucideIcon;
+  title: string;
+  desc: string;
+  cta: string;
+  accent: "brand" | "emerald" | "amber" | "rose";
+}[] = [
   {
     href: "/dashboard/analyses/new",
-    icon: "🖼️",
+    icon: ImageIcon,
     title: "Analyze a Thumbnail",
     desc: "Upload and score a new thumbnail against live competitors",
     cta: "Start analysis",
@@ -17,7 +42,7 @@ const QUICK_ACTIONS = [
   },
   {
     href: "/dashboard/ideas",
-    icon: "💡",
+    icon: Lightbulb,
     title: "Generate Video Ideas",
     desc: "AI-powered ideas based on what's working in your niche",
     cta: "Get ideas",
@@ -25,7 +50,7 @@ const QUICK_ACTIONS = [
   },
   {
     href: "/dashboard/tracking",
-    icon: "📡",
+    icon: Radar,
     title: "Track Competitors",
     desc: "Monitor how rival thumbnails change over time",
     cta: "Set up tracking",
@@ -33,7 +58,7 @@ const QUICK_ACTIONS = [
   },
   {
     href: "/dashboard/database",
-    icon: "🔥",
+    icon: Flame,
     title: "Viral Thumbnail DB",
     desc: "Browse top-performing thumbnails across all niches",
     cta: "Browse database",
@@ -48,11 +73,19 @@ const ACCENT_CLASSES: Record<string, string> = {
   rose: "border-rose-500/30 hover:border-rose-500/60",
 };
 
+const ACCENT_ICON_CLASSES: Record<string, string> = {
+  brand: "bg-brand-600/15 text-brand-300",
+  emerald: "bg-emerald-500/15 text-emerald-400",
+  amber: "bg-amber-500/15 text-amber-400",
+  rose: "bg-rose-500/15 text-rose-400",
+};
+
 export default function DashboardPage() {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [analyses, setAnalyses] = useState<AnalysisSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { fadeInUp, staggerContainer } = useMotionVariants();
 
   useEffect(() => {
     let cancelled = false;
@@ -78,7 +111,9 @@ export default function DashboardPage() {
       }
     }
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const completedAnalyses = analyses.filter((a) => a.status === "complete" && a.score !== null);
@@ -94,96 +129,120 @@ export default function DashboardPage() {
     : 0;
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white">
-            {workspace ? `${workspace.name}` : "Overview"}
-          </h1>
-          <p className="mt-1 text-sm text-gray-400">
-            {workspace
+    <motion.div initial="hidden" animate="visible" variants={staggerContainer} className="space-y-8">
+      <motion.div variants={fadeInUp}>
+        <PageHeader
+          title={workspace ? workspace.name : "Overview"}
+          description={
+            workspace
               ? `${workspace.plan} plan · ${workspace.analyses_this_month} of ${workspace.analyses_limit} analyses used this month`
-              : "Your ThumbnailIQ workspace"}
-          </p>
-        </div>
-        <Link
-          href="/dashboard/analyses/new"
-          className="rounded-lg bg-brand-gradient px-4 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:opacity-90"
-        >
-          + New Analysis
-        </Link>
-      </div>
+              : "Your ThumbnailIQ workspace"
+          }
+          actions={
+            <Link href="/dashboard/analyses/new">
+              <Button icon={<Plus className="h-4 w-4" aria-hidden="true" />}>New Analysis</Button>
+            </Link>
+          }
+        />
+      </motion.div>
 
       {error && (
-        <p className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</p>
+        <motion.div variants={fadeInUp}>
+          <Alert variant="danger">{error}</Alert>
+        </motion.div>
       )}
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <motion.div variants={fadeInUp} className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {[
-          { label: "Analyses this month", value: workspace?.analyses_this_month ?? "—", sub: `of ${workspace?.analyses_limit ?? "—"} limit` },
+          {
+            label: "Analyses this month",
+            value: workspace?.analyses_this_month ?? "—",
+            sub: `of ${workspace?.analyses_limit ?? "—"} limit`,
+          },
           { label: "Average score", value: avgScore !== null ? avgScore : "—", sub: "across completed analyses" },
           { label: "Best score", value: bestScore !== null ? bestScore : "—", sub: "highest scoring thumbnail" },
-          { label: "Current plan", value: workspace ? workspace.plan.charAt(0).toUpperCase() + workspace.plan.slice(1) : "—", sub: <Link href="/dashboard/billing" className="text-brand-300 hover:underline">Upgrade plan</Link> },
+          {
+            label: "Current plan",
+            value: workspace ? workspace.plan.charAt(0).toUpperCase() + workspace.plan.slice(1) : "—",
+            sub: (
+              <Link href="/dashboard/billing" className="text-brand-300 hover:underline">
+                Upgrade plan
+              </Link>
+            ),
+          },
         ].map((s, i) => (
-          <div key={i} className="rounded-2xl border border-surface-300 bg-surface-100 p-5">
+          <Card key={i}>
             <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{s.label}</p>
-            <p className="mt-2 text-3xl font-bold text-white">{s.value}</p>
+            <p className="mt-2 text-3xl font-bold tracking-tight text-white">{s.value}</p>
             <p className="mt-1 text-xs text-gray-500">{s.sub}</p>
-          </div>
+          </Card>
         ))}
-      </div>
+      </motion.div>
 
       {/* Usage bar */}
       {workspace && (
-        <div className="rounded-2xl border border-surface-300 bg-surface-100 p-5">
-          <div className="mb-2 flex items-center justify-between text-sm">
-            <span className="text-gray-300">Monthly usage</span>
-            <span className={`font-medium ${usagePct > 80 ? "text-amber-400" : "text-white"}`}>
-              {workspace.analyses_this_month} / {workspace.analyses_limit}
-            </span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-surface-300">
-            <div
-              className={`h-full transition-all ${usagePct > 80 ? "bg-amber-500" : "bg-brand-gradient"}`}
-              style={{ width: `${usagePct}%` }}
-            />
-          </div>
-          {usagePct > 80 && (
-            <p className="mt-2 text-xs text-amber-400">
-              Running low — <Link href="/dashboard/billing" className="underline">upgrade your plan</Link>
-            </p>
-          )}
-        </div>
+        <motion.div variants={fadeInUp}>
+          <Card>
+            <div className="mb-2 flex items-center justify-between text-sm">
+              <span className="text-gray-300">Monthly usage</span>
+              <span className={`font-medium ${usagePct > 80 ? "text-warning" : "text-white"}`}>
+                {workspace.analyses_this_month} / {workspace.analyses_limit}
+              </span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-surface-300">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${usagePct}%` }}
+                transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                className={`h-full ${usagePct > 80 ? "bg-warning" : "bg-brand-gradient"}`}
+              />
+            </div>
+            {usagePct > 80 && (
+              <p className="mt-2 text-xs text-warning">
+                Running low —{" "}
+                <Link href="/dashboard/billing" className="underline">
+                  upgrade your plan
+                </Link>
+              </p>
+            )}
+          </Card>
+        </motion.div>
       )}
 
       {/* Quick actions */}
-      <div>
+      <motion.div variants={fadeInUp}>
         <h2 className="mb-4 text-base font-semibold text-white">Tools</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {QUICK_ACTIONS.map((action) => (
-            <Link
-              key={action.href}
-              href={action.href}
-              className={`group flex flex-col rounded-2xl border bg-surface-100 p-5 transition ${ACCENT_CLASSES[action.accent]}`}
-            >
-              <span className="mb-3 text-2xl">{action.icon}</span>
-              <p className="text-sm font-semibold text-white">{action.title}</p>
-              <p className="mt-1 flex-1 text-xs text-gray-500">{action.desc}</p>
-              <p className="mt-4 text-xs font-medium text-brand-300 group-hover:text-brand-200">
-                {action.cta} →
-              </p>
-            </Link>
-          ))}
+          {QUICK_ACTIONS.map((action) => {
+            const Icon = action.icon;
+            return (
+              <Link
+                key={action.href}
+                href={action.href}
+                className={`group flex flex-col rounded-2xl border bg-surface-100 p-5 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card-hover ${ACCENT_CLASSES[action.accent]}`}
+              >
+                <div
+                  className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl ${ACCENT_ICON_CLASSES[action.accent]}`}
+                >
+                  <Icon className="h-5 w-5" aria-hidden="true" />
+                </div>
+                <p className="text-sm font-semibold text-white">{action.title}</p>
+                <p className="mt-1 flex-1 text-xs leading-relaxed text-gray-500">{action.desc}</p>
+                <p className="mt-4 text-xs font-medium text-brand-300 transition-colors group-hover:text-brand-200">
+                  {action.cta} →
+                </p>
+              </Link>
+            );
+          })}
         </div>
-      </div>
+      </motion.div>
 
       {/* Recent analyses */}
-      <div>
+      <motion.div variants={fadeInUp}>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold text-white">Recent Analyses</h2>
-          <Link href="/dashboard/analyses" className="text-sm text-brand-300 hover:text-brand-200">
+          <Link href="/dashboard/analyses" className="text-sm text-brand-300 transition-colors hover:text-brand-200">
             View all →
           </Link>
         </div>
@@ -191,25 +250,24 @@ export default function DashboardPage() {
         {loading ? (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="animate-pulse rounded-xl border border-surface-300 bg-surface-100 p-3">
-                <div className="aspect-video w-full rounded-lg bg-surface-300 mb-2" />
-                <div className="h-3 w-3/4 rounded bg-surface-300 mb-1" />
-                <div className="h-3 w-1/2 rounded bg-surface-300" />
+              <div key={i} className="rounded-xl border border-surface-300 bg-surface-100 p-3">
+                <Skeleton className="mb-2 aspect-video w-full" />
+                <Skeleton className="mb-1 h-3 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
               </div>
             ))}
           </div>
         ) : analyses.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-surface-300 p-14 text-center">
-            <p className="text-4xl mb-3">🖼️</p>
-            <p className="font-medium text-gray-300">No analyses yet</p>
-            <p className="mt-1 text-sm text-gray-500">Upload a thumbnail to see how it compares to your niche.</p>
-            <Link
-              href="/dashboard/analyses/new"
-              className="mt-4 inline-block rounded-lg bg-brand-gradient px-5 py-2.5 text-sm font-semibold text-white shadow-glow hover:opacity-90"
-            >
-              Create First Analysis
-            </Link>
-          </div>
+          <EmptyState
+            icon={<ImageIcon className="h-5 w-5" aria-hidden="true" />}
+            title="No analyses yet"
+            description="Upload a thumbnail to see how it compares to your niche."
+            action={
+              <Link href="/dashboard/analyses/new">
+                <Button>Create First Analysis</Button>
+              </Link>
+            }
+          />
         ) : (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             {analyses.map((a) => {
@@ -218,34 +276,38 @@ export default function DashboardPage() {
                 <Link
                   key={a.id}
                   href={`/dashboard/analyses/${a.id}`}
-                  className="group rounded-xl border border-surface-300 bg-surface-100 p-3 transition hover:border-brand-500/50"
+                  className="group rounded-xl border border-surface-300 bg-surface-100 p-3 transition-colors duration-150 hover:border-brand-500/50"
                 >
                   <div className="relative mb-2 overflow-hidden rounded-lg bg-surface-300">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={a.thumbnail_url}
                       alt={a.keyword}
-                      className="aspect-video w-full object-cover transition group-hover:scale-105"
+                      className="aspect-video w-full object-cover transition-transform duration-300 group-hover:scale-105"
                     />
                     {band && (
-                      <span className={`absolute right-1.5 top-1.5 rounded-md px-1.5 py-0.5 text-xs font-bold ${band.bgClass} ${band.textClass}`}>
+                      <span
+                        className={`absolute right-1.5 top-1.5 rounded-md px-1.5 py-0.5 text-xs font-bold ${band.bgClass} ${band.textClass}`}
+                      >
                         {a.score}
                       </span>
                     )}
-                    {a.status === "pending" || a.status === "processing" ? (
-                      <span className="absolute right-1.5 top-1.5 rounded-md bg-amber-500/90 px-1.5 py-0.5 text-xs font-bold text-white">
-                        ⏳
+                    {(a.status === "pending" || a.status === "processing") && (
+                      <span className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded-md bg-warning/90 px-1.5 py-0.5 text-xs font-bold text-black">
+                        <Clock className="h-3 w-3" aria-hidden="true" />
                       </span>
-                    ) : null}
+                    )}
                   </div>
                   <p className="truncate text-sm font-medium text-gray-200">{a.keyword}</p>
-                  <p className="mt-0.5 text-xs capitalize text-gray-500">{a.status}</p>
+                  <Badge variant={a.status} className="mt-1">
+                    {a.status}
+                  </Badge>
                 </Link>
               );
             })}
           </div>
         )}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

@@ -2,8 +2,17 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { motion } from "framer-motion";
+import { Plus } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { getScoreBand } from "@/components/ScoreGauge";
+import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { useMotionVariants } from "@/lib/motion";
 import type { AnalysisSummary, AnalysisStatus, PaginatedResponse } from "@/types";
 
 const STATUS_FILTERS: { label: string; value: AnalysisStatus | "" }[] = [
@@ -14,13 +23,6 @@ const STATUS_FILTERS: { label: string; value: AnalysisStatus | "" }[] = [
   { label: "Failed", value: "failed" },
 ];
 
-const STATUS_BADGE: Record<AnalysisStatus, string> = {
-  pending: "bg-gray-500/15 text-gray-300",
-  processing: "bg-amber-500/15 text-amber-400",
-  complete: "bg-emerald-500/15 text-emerald-400",
-  failed: "bg-red-500/15 text-red-400",
-};
-
 const PER_PAGE = 12;
 
 export default function AnalysesPage() {
@@ -30,6 +32,7 @@ export default function AnalysesPage() {
   const [status, setStatus] = useState<AnalysisStatus | "">("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { fadeInUp, staggerContainer } = useMotionVariants();
 
   useEffect(() => {
     let cancelled = false;
@@ -61,18 +64,15 @@ export default function AnalysesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white">All Analyses</h1>
-          <p className="mt-1 text-sm text-gray-400">Browse and filter your thumbnail analyses.</p>
-        </div>
-        <Link
-          href="/dashboard/analyses/new"
-          className="rounded-lg bg-brand-gradient px-4 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:opacity-90"
-        >
-          + New Analysis
-        </Link>
-      </div>
+      <PageHeader
+        title="All Analyses"
+        description="Browse and filter your thumbnail analyses."
+        actions={
+          <Link href="/dashboard/analyses/new">
+            <Button icon={<Plus className="h-4 w-4" aria-hidden="true" />}>New Analysis</Button>
+          </Link>
+        }
+      />
 
       <div className="flex flex-wrap gap-2">
         {STATUS_FILTERS.map((f) => (
@@ -82,7 +82,7 @@ export default function AnalysesPage() {
               setStatus(f.value);
               setPage(1);
             }}
-            className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
+            className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors duration-150 ${
               status === f.value
                 ? "bg-brand-600 text-white"
                 : "bg-surface-200 text-gray-400 hover:text-gray-200"
@@ -93,72 +93,82 @@ export default function AnalysesPage() {
         ))}
       </div>
 
-      {error && (
-        <p className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</p>
-      )}
+      {error && <Alert variant="danger">{error}</Alert>}
 
       {loading ? (
-        <p className="text-sm text-gray-500">Loading...</p>
-      ) : analyses.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-surface-300 p-10 text-center text-sm text-gray-500">
-          No analyses found.
-        </div>
-      ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[...Array(8)].map((_, i) => (
+            <div key={i} className="rounded-xl border border-surface-300 bg-surface-100 p-3">
+              <Skeleton className="mb-2 aspect-video w-full" />
+              <Skeleton className="mb-1 h-3 w-3/4" />
+              <Skeleton className="h-4 w-16 rounded-full" />
+            </div>
+          ))}
+        </div>
+      ) : analyses.length === 0 ? (
+        <EmptyState title="No analyses found." description="Try a different filter or create a new analysis." />
+      ) : (
+        <motion.div
+          initial="hidden"
+          animate="visible"
+          variants={staggerContainer}
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+        >
           {analyses.map((a) => {
             const band = typeof a.score === "number" ? getScoreBand(a.score) : null;
             return (
-              <Link
-                key={a.id}
-                href={`/dashboard/analyses/${a.id}`}
-                className="rounded-xl border border-surface-300 bg-surface-100 p-3 transition hover:border-brand-500/50"
-              >
-                <div className="relative mb-2 overflow-hidden rounded-lg bg-surface-300">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={a.thumbnail_url}
-                    alt={a.keyword}
-                    className="aspect-video w-full object-cover"
-                  />
-                  {band && (
-                    <span
-                      className={`absolute right-1.5 top-1.5 rounded-md px-1.5 py-0.5 text-xs font-bold ${band.bgClass} ${band.textClass}`}
-                    >
-                      {a.score}
-                    </span>
-                  )}
-                </div>
-                <p className="truncate text-sm font-medium text-gray-200">{a.keyword}</p>
-                <span
-                  className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium capitalize ${STATUS_BADGE[a.status]}`}
+              <motion.div key={a.id} variants={fadeInUp}>
+                <Link
+                  href={`/dashboard/analyses/${a.id}`}
+                  className="block rounded-xl border border-surface-300 bg-surface-100 p-3 transition-colors duration-150 hover:border-brand-500/50"
                 >
-                  {a.status}
-                </span>
-              </Link>
+                  <div className="relative mb-2 overflow-hidden rounded-lg bg-surface-300">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={a.thumbnail_url}
+                      alt={a.keyword}
+                      className="aspect-video w-full object-cover"
+                    />
+                    {band && (
+                      <span
+                        className={`absolute right-1.5 top-1.5 rounded-md px-1.5 py-0.5 text-xs font-bold ${band.bgClass} ${band.textClass}`}
+                      >
+                        {a.score}
+                      </span>
+                    )}
+                  </div>
+                  <p className="truncate text-sm font-medium text-gray-200">{a.keyword}</p>
+                  <Badge variant={a.status} className="mt-1">
+                    {a.status}
+                  </Badge>
+                </Link>
+              </motion.div>
             );
           })}
-        </div>
+        </motion.div>
       )}
 
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-3">
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page <= 1}
-            className="rounded-lg border border-surface-300 px-3 py-1.5 text-sm text-gray-300 disabled:opacity-40"
           >
             Previous
-          </button>
+          </Button>
           <span className="text-sm text-gray-500">
             Page {page} of {totalPages}
           </span>
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages}
-            className="rounded-lg border border-surface-300 px-3 py-1.5 text-sm text-gray-300 disabled:opacity-40"
           >
             Next
-          </button>
+          </Button>
         </div>
       )}
     </div>

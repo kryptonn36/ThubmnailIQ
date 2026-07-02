@@ -1,8 +1,8 @@
 -- name: CreateAnalysis :one
 INSERT INTO analyses (
-    workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, status
+    workspace_id, project_id, user_id, keyword, keyword_normalized, thumbnail_s3_key, file_size_bytes, status
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, 'pending'
+    $1, $2, $3, $4, $5, $6, $7, 'pending'
 ) RETURNING *;
 
 -- name: GetAnalysisByID :one
@@ -55,8 +55,8 @@ WHERE id = $1
 RETURNING *;
 
 -- name: CreateThumbnailVersion :one
-INSERT INTO thumbnail_versions (analysis_id, version_number, s3_key, score, cv_results)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO thumbnail_versions (analysis_id, version_number, s3_key, score, cv_results, file_size_bytes)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
 -- name: ListThumbnailVersions :many

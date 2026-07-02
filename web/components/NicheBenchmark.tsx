@@ -1,4 +1,6 @@
+import { CheckCircle2, TriangleAlert } from "lucide-react";
 import type { Competitor } from "@/types";
+import { Card } from "@/components/ui/Card";
 
 interface NicheBenchmarkProps {
   score: number;
@@ -28,8 +30,10 @@ export default function NicheBenchmark({ score, competitors, keyword }: NicheBen
   }));
   const maxBucketCount = Math.max(...buckets.map((b) => b.count), 1);
 
+  const isAboveAvg = score > avg;
+
   return (
-    <div className="rounded-2xl border border-surface-300 bg-surface-100 p-6">
+    <Card className="p-6">
       <h3 className="mb-1 text-base font-semibold text-white">Niche Benchmark</h3>
       <p className="mb-5 text-xs text-gray-500">
         How your score compares to {scores.length} competitors for &ldquo;{keyword}&rdquo;
@@ -43,7 +47,10 @@ export default function NicheBenchmark({ score, competitors, keyword }: NicheBen
           { label: "Top score", value: max, accent: false },
           { label: "Percentile", value: `${percentile}%`, accent: false },
         ].map(({ label, value, accent }) => (
-          <div key={label} className={`rounded-xl p-3 ${accent ? "bg-brand-600/20 ring-1 ring-brand-500/40" : "bg-surface-200"}`}>
+          <div
+            key={label}
+            className={`rounded-xl p-3 ${accent ? "bg-brand-600/20 ring-1 ring-brand-500/40" : "bg-surface-200"}`}
+          >
             <p className={`text-xl font-bold ${accent ? "text-brand-300" : "text-white"}`}>{value}</p>
             <p className="mt-0.5 text-[10px] text-gray-500">{label}</p>
           </div>
@@ -53,11 +60,11 @@ export default function NicheBenchmark({ score, competitors, keyword }: NicheBen
       {/* Distribution chart */}
       <div>
         <p className="mb-2 text-[11px] font-medium text-gray-500">Score distribution</p>
-        <div className="flex items-end gap-1 h-20">
+        <div className="flex h-20 items-end gap-1">
           {buckets.map((b) => (
             <div key={b.range} className="flex flex-1 flex-col items-center gap-0.5">
               <div
-                className={`w-full rounded-t transition ${b.hasYours ? "bg-brand-500" : "bg-surface-300"}`}
+                className={`w-full rounded-t transition-all duration-300 ${b.hasYours ? "bg-brand-500" : "bg-surface-300"}`}
                 style={{ height: `${(b.count / maxBucketCount) * 100}%`, minHeight: b.count > 0 ? "4px" : "0" }}
                 title={`${b.range}: ${b.count} competitors${b.hasYours ? " (you)" : ""}`}
               />
@@ -65,14 +72,23 @@ export default function NicheBenchmark({ score, competitors, keyword }: NicheBen
           ))}
         </div>
         <div className="mt-1 flex justify-between text-[9px] text-gray-600">
-          <span>0</span><span>50</span><span>100</span>
+          <span>0</span>
+          <span>50</span>
+          <span>100</span>
         </div>
       </div>
 
-      <p className="mt-4 rounded-lg bg-surface-200 px-3 py-2 text-xs text-gray-400">
-        {score > avg
-          ? `✅ Your thumbnail scores ${score - avg} points above the niche average — top ${100 - percentile}% of competitors.`
-          : `⚠ Your thumbnail scores ${avg - score} points below the niche average. Focus on the suggestions below to close the gap.`}
+      <p className="mt-4 flex items-start gap-2 rounded-lg bg-surface-200 px-3 py-2 text-xs text-gray-400">
+        {isAboveAvg ? (
+          <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" />
+        ) : (
+          <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
+        )}
+        <span>
+          {isAboveAvg
+            ? `Your thumbnail scores ${score - avg} points above the niche average — top ${100 - percentile}% of competitors.`
+            : `Your thumbnail scores ${avg - score} points below the niche average. Focus on the suggestions below to close the gap.`}
+        </span>
       </p>
 
       {/* Range bar */}
@@ -89,9 +105,11 @@ export default function NicheBenchmark({ score, competitors, keyword }: NicheBen
           />
         </div>
         <div className="mt-1 flex justify-between text-[9px] text-gray-600">
-          <span>Min {min}</span><span>Avg {avg}</span><span>Max {max}</span>
+          <span>Min {min}</span>
+          <span>Avg {avg}</span>
+          <span>Max {max}</span>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

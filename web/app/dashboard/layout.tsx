@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Sidebar from "@/components/Sidebar";
+import Link from "next/link";
+import { Menu } from "lucide-react";
+import Sidebar, { MobileSidebar } from "@/components/Sidebar";
+import { Spinner } from "@/components/ui/Spinner";
 import { isAuthenticated } from "@/lib/auth";
 
 export default function DashboardLayout({
@@ -12,6 +15,7 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const [checked, setChecked] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -23,8 +27,9 @@ export default function DashboardLayout({
 
   if (!checked) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <span className="text-sm text-gray-500">Loading...</span>
+      <div className="flex min-h-screen items-center justify-center gap-2.5 text-gray-500">
+        <Spinner className="h-4 w-4" />
+        <span className="text-sm">Loading…</span>
       </div>
     );
   }
@@ -32,8 +37,25 @@ export default function DashboardLayout({
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      <div className="flex-1">
-        <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
+      <MobileSidebar open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex h-14 items-center gap-3 border-b border-surface-300 bg-surface-50 px-4 lg:hidden">
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen(true)}
+            aria-label="Open navigation menu"
+            className="rounded-lg p-2 text-gray-300 transition-colors hover:bg-surface-200 hover:text-white"
+          >
+            <Menu className="h-5 w-5" aria-hidden="true" />
+          </button>
+          <Link href="/dashboard" className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-gradient text-xs font-bold text-white">
+              IQ
+            </span>
+            <span className="text-sm font-semibold text-white">ThumbnailIQ</span>
+          </Link>
+        </header>
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-8">{children}</main>
       </div>
     </div>
   );

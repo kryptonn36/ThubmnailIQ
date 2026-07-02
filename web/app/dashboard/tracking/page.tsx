@@ -1,10 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
+import { Radar } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
+import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Input } from "@/components/ui/Input";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { useMotionVariants } from "@/lib/motion";
 import type { TrackingJob, TrackingType } from "@/types";
 
 export default function TrackingPage() {
+  const { fadeInUp, staggerContainer } = useMotionVariants();
   const [jobs, setJobs] = useState<TrackingJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,17 +66,12 @@ export default function TrackingPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Tracking</h1>
-        <p className="mt-1 text-sm text-gray-400">
-          Track channels or keywords to monitor competitor thumbnail changes over time.
-        </p>
-      </div>
+      <PageHeader
+        title="Tracking"
+        description="Track channels or keywords to monitor competitor thumbnail changes over time."
+      />
 
-      <form
-        onSubmit={handleSubmit}
-        className="space-y-4 rounded-2xl border border-surface-300 bg-surface-100 p-6"
-      >
+      <Card as="form" onSubmit={handleSubmit} className="space-y-4">
         <h2 className="text-base font-semibold text-white">Add Tracking Job</h2>
 
         <div className="flex gap-2">
@@ -73,10 +80,8 @@ export default function TrackingPage() {
               key={t}
               type="button"
               onClick={() => setType(t)}
-              className={`rounded-full px-3 py-1.5 text-sm font-medium capitalize transition ${
-                type === t
-                  ? "bg-brand-600 text-white"
-                  : "bg-surface-200 text-gray-400 hover:text-gray-200"
+              className={`rounded-full px-3 py-1.5 text-sm font-medium capitalize transition-colors duration-150 ${
+                type === t ? "bg-brand-600 text-white" : "bg-surface-200 text-gray-400 hover:text-gray-200"
               }`}
             >
               {t}
@@ -86,75 +91,74 @@ export default function TrackingPage() {
 
         {type === "keyword" ? (
           <div>
-            <label htmlFor="keyword" className="mb-1 block text-sm font-medium text-gray-300">
+            <label htmlFor="keyword" className="mb-1.5 block text-sm font-medium text-gray-300">
               Keyword
             </label>
-            <input
+            <Input
               id="keyword"
               type="text"
               required
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               placeholder="e.g. crypto trading tips"
-              className="w-full rounded-lg border border-surface-300 bg-surface-200 px-3 py-2 text-sm text-white outline-none focus:border-brand-500"
             />
           </div>
         ) : (
           <div>
-            <label htmlFor="channelId" className="mb-1 block text-sm font-medium text-gray-300">
+            <label htmlFor="channelId" className="mb-1.5 block text-sm font-medium text-gray-300">
               Channel ID
             </label>
-            <input
+            <Input
               id="channelId"
               type="text"
               required
               value={channelId}
               onChange={(e) => setChannelId(e.target.value)}
               placeholder="e.g. UC1234567890"
-              className="w-full rounded-lg border border-surface-300 bg-surface-200 px-3 py-2 text-sm text-white outline-none focus:border-brand-500"
             />
           </div>
         )}
 
         <div>
-          <label htmlFor="interval" className="mb-1 block text-sm font-medium text-gray-300">
+          <label htmlFor="interval" className="mb-1.5 block text-sm font-medium text-gray-300">
             Check interval (hours)
           </label>
-          <input
+          <Input
             id="interval"
             type="number"
             min={1}
             max={168}
             value={intervalHours}
             onChange={(e) => setIntervalHours(Number(e.target.value))}
-            className="w-full rounded-lg border border-surface-300 bg-surface-200 px-3 py-2 text-sm text-white outline-none focus:border-brand-500"
           />
         </div>
 
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <Alert variant="danger">{error}</Alert>}
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="rounded-lg bg-brand-gradient px-4 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:opacity-90 disabled:opacity-60"
-        >
-          {submitting ? "Adding..." : "Add Tracking Job"}
-        </button>
-      </form>
+        <Button type="submit" loading={submitting}>
+          Add Tracking Job
+        </Button>
+      </Card>
 
       <div>
         <h2 className="mb-4 text-lg font-semibold text-white">Tracked Items</h2>
         {loading ? (
-          <p className="text-sm text-gray-500">Loading...</p>
-        ) : jobs.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-surface-300 p-10 text-center text-sm text-gray-500">
-            You&apos;re not tracking anything yet.
-          </div>
-        ) : (
           <div className="space-y-3">
+            {[1, 2].map((i) => (
+              <Skeleton key={i} className="h-16 rounded-xl" />
+            ))}
+          </div>
+        ) : jobs.length === 0 ? (
+          <EmptyState
+            icon={<Radar className="h-5 w-5" aria-hidden="true" />}
+            title="You're not tracking anything yet."
+          />
+        ) : (
+          <motion.div initial="hidden" animate="visible" variants={staggerContainer} className="space-y-3">
             {jobs.map((job) => (
-              <div
+              <motion.div
                 key={job.id}
+                variants={fadeInUp}
                 className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-surface-300 bg-surface-100 p-4"
               >
                 <div>
@@ -166,17 +170,14 @@ export default function TrackingPage() {
                   </p>
                 </div>
                 <div className="text-right text-xs text-gray-500">
-                  <p className="capitalize">{job.status}</p>
-                  <p>
-                    Last checked:{" "}
-                    {job.last_checked_at
-                      ? new Date(job.last_checked_at).toLocaleString()
-                      : "Never"}
+                  <Badge variant={job.status === "active" ? "success" : "neutral"}>{job.status}</Badge>
+                  <p className="mt-1">
+                    Last checked: {job.last_checked_at ? new Date(job.last_checked_at).toLocaleString() : "Never"}
                   </p>
                 </div>
-              </div>
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
         )}
       </div>
     </div>
