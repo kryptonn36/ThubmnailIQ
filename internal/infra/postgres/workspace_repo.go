@@ -90,6 +90,10 @@ func (r *WorkspaceRepo) ListMembers(ctx context.Context, workspaceID uuid.UUID) 
 	return out, nil
 }
 
+func (r *WorkspaceRepo) IsMember(ctx context.Context, workspaceID, userID uuid.UUID) (bool, error) {
+	return r.q.IsWorkspaceMember(ctx, db.IsWorkspaceMemberParams{WorkspaceID: workspaceID, UserID: userID})
+}
+
 func (r *WorkspaceRepo) IncrementAnalysesUsage(ctx context.Context, workspaceID uuid.UUID) error {
 	return r.q.IncrementWorkspaceAnalysesUsage(ctx, workspaceID)
 }

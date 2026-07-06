@@ -29,6 +29,7 @@ func toDomainUser(u db.User) *user.User {
 		FullName:      u.FullName,
 		AvatarURL:     textVal(u.AvatarUrl),
 		EmailVerified: u.EmailVerified,
+		Status:        u.Status,
 		CreatedAt:     tsVal(u.CreatedAt),
 	}
 }

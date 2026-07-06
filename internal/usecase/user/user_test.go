@@ -271,6 +271,10 @@ func (r *fakeWorkspaceRepo) ListMembers(_ context.Context, _ uuid.UUID) ([]*work
 	return r.members, nil
 }
 
+func (r *fakeWorkspaceRepo) IsMember(_ context.Context, _, _ uuid.UUID) (bool, error) {
+	return true, nil
+}
+
 func (r *fakeWorkspaceRepo) IncrementAnalysesUsage(_ context.Context, _ uuid.UUID) error {
 	return nil
 }

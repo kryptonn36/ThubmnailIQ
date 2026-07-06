@@ -104,6 +104,7 @@ func main() {
 	redisClient := goredis.NewClient(&goredis.Options{Addr: cfg.Redis.Addr, Password: cfg.Redis.Password, DB: cfg.Redis.DB})
 	defer redisClient.Close()
 	rateLimiter := redis.NewRateLimiter(redisClient)
+	pendingOrders := redis.NewPendingOrderStore(redisClient)
 	healthChecker := health.NewChecker(pool, redisClient, cvClient)
 
 	userRepo := postgres.NewUserRepo(pool)
@@ -122,7 +123,7 @@ func main() {
 	userUC := useruc.NewUsecase(userRepo, workspaceRepo, jwtSvc)
 	workspaceUC := workspaceuc.NewUsecase(workspaceRepo, userRepo)
 	analysisUC := analysisuc.NewUsecase(analysisRepo, workspaceRepo, storage, cdnBuilder, cvClient, queueClient)
-	billingUC := billinguc.NewUsecase(billingRepo, workspaceRepo, gateway, cfg.Payment.Currency)
+	billingUC := billinguc.NewUsecase(billingRepo, workspaceRepo, gateway, pendingOrders, cfg.Payment.Currency)
 	trackingUC := trackinguc.NewUsecase(competitorRepo)
 	viralDBUC := viraldbuc.NewUsecase(viralDBRepo, ytFetcher)
 	adminUC := adminuc.NewUsecase(adminRepo, adminJWTSvc, healthChecker)
@@ -146,7 +147,8 @@ func main() {
 		AdminProfile:   handler.NewAdminProfileHandler(adminUC),
 	}
 
-	router := server.NewRouter(handlers, jwtSvc, adminJWTSvc, billingRepo, rateLimiter, log)
+	allowedOrigins := splitAndTrim(cfg.CORS.AllowedOrigins)
+	router := server.NewRouter(handlers, jwtSvc, adminJWTSvc, billingRepo, rateLimiter, allowedOrigins, log)
 
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	log.Info().Str("addr", addr).Msg("starting ThumbnailIQ API server")
@@ -160,5 +162,18 @@ func productionCfgCheck(cfg *config.Config) error{
 	if strings.Contains(cfg.Database.URL, "sslmode=disable"){
 		return errors.New("database SSL must be enabled in production")
 	}
-	return nil 
+	return nil
+}
+
+// splitAndTrim turns a comma-separated config string into a clean slice,
+// dropping empty entries and surrounding whitespace.
+func splitAndTrim(csv string) []string {
+	parts := strings.Split(csv, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if trimmed := strings.TrimSpace(p); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }

@@ -56,6 +56,12 @@ func (h *WorkspaceHandler) InviteMember(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid workspace id"})
 		return
 	}
+	// Inviting members is an owner/admin-only action, not something any member
+	// of the workspace can do.
+	if err := h.uc.EnsureRole(c.Request.Context(), middleware.UserID(c), workspaceID, "owner", "admin"); err != nil {
+		respondError(c, err)
+		return
+	}
 	var req inviteMemberRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -81,6 +87,10 @@ func (h *WorkspaceHandler) UpdateBrand(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid workspace id"})
 		return
 	}
+	if err := h.uc.EnsureMember(c.Request.Context(), middleware.UserID(c), workspaceID); err != nil {
+		respondError(c, err)
+		return
+	}
 	var req updateBrandRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -98,6 +108,10 @@ func (h *WorkspaceHandler) ListMembers(c *gin.Context) {
 	workspaceID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid workspace id"})
+		return
+	}
+	if err := h.uc.EnsureMember(c.Request.Context(), middleware.UserID(c), workspaceID); err != nil {
+		respondError(c, err)
 		return
 	}
 	members, err := h.uc.ListMembers(c.Request.Context(), workspaceID)

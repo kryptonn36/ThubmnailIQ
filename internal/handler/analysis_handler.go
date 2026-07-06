@@ -40,7 +40,30 @@ func (h *AnalysisHandler) thumbnailURL(key string) string {
 	return url
 }
 
+// allowedImageTypes is the set of content types we accept for thumbnail
+// uploads, keyed by what http.DetectContentType reports for that format.
+var allowedImageTypes = map[string]bool{
+	"image/jpeg": true,
+	"image/png":  true,
+	"image/webp": true,
+}
+
+// detectImageContentType sniffs the real MIME type from the file's leading
+// bytes (never the client-supplied header) and returns it only if it's an
+// allowed image format.
+func detectImageContentType(data []byte) (string, bool) {
+	ct := http.DetectContentType(data)
+	if !allowedImageTypes[ct] {
+		return "", false
+	}
+	return ct, true
+}
+
 func (h *AnalysisHandler) Create(c *gin.Context) {
+	const maxUploadSize = 10 << 20
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxUploadSize)
+
+
 	workspaceID, err := resolveWorkspaceID(c, c.PostForm("workspace_id"), h.workspaces)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "could not resolve workspace_id: " + err.Error()})
@@ -65,7 +88,19 @@ func (h *AnalysisHandler) Create(c *gin.Context) {
 	defer file.Close()
 	data, err := io.ReadAll(file)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "could not read uploaded file"})
+		// Triggered by MaxBytesReader when the body exceeds maxUploadSize, or
+		// on a genuine read error. Either way the upload is rejected.
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "uploaded file is too large or could not be read"})
+		return
+	}
+
+	// Never trust the client-supplied Content-Type. Sniff the real type from
+	// the file's magic bytes and only accept a small allowlist of image
+	// formats, so non-image (or active) content can't be stored and later
+	// served from our CDN domain.
+	contentType, ok := detectImageContentType(data)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "thumbnail must be a JPEG, PNG or WebP image"})
 		return
 	}
 
@@ -82,7 +117,7 @@ func (h *AnalysisHandler) Create(c *gin.Context) {
 		UserID:      middleware.UserID(c),
 		Keyword:     keyword,
 		FileBytes:   data,
-		ContentType: fileHeader.Header.Get("Content-Type"),
+		ContentType: contentType,
 	})
 	if err != nil {
 		respondError(c, err)
@@ -137,6 +172,13 @@ func (h *AnalysisHandler) Get(c *gin.Context) {
 		respondError(c, err)
 		return
 	}
+	// Analyses are addressed by their own UUID, so authorize by the analysis's
+	// workspace — otherwise any authenticated user could read another tenant's
+	// analysis just by knowing its ID.
+	if err := h.workspaces.EnsureMember(c.Request.Context(), middleware.UserID(c), a.WorkspaceID); err != nil {
+		respondError(c, err)
+		return
+	}
 
 	resp := gin.H{
 		"id": a.ID, "status": a.Status, "keyword": a.Keyword, "thumbnail_url": h.thumbnailURL(a.ThumbnailS3Key),
@@ -179,10 +221,25 @@ func (h *AnalysisHandler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// authorizeAnalysis loads an analysis and confirms the caller is a member of
+// its workspace, returning ErrForbidden otherwise. Every analysis-by-ID action
+// that isn't a plain read routes through here.
+func (h *AnalysisHandler) authorizeAnalysis(c *gin.Context, id uuid.UUID) error {
+	a, err := h.uc.Get(c.Request.Context(), id)
+	if err != nil {
+		return err
+	}
+	return h.workspaces.EnsureMember(c.Request.Context(), middleware.UserID(c), a.WorkspaceID)
+}
+
 func (h *AnalysisHandler) AddCompareVersion(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid analysis id"})
+		return
+	}
+	if err := h.authorizeAnalysis(c, id); err != nil {
+		respondError(c, err)
 		return
 	}
 	fileHeader, err := c.FormFile("thumbnail")
@@ -223,6 +280,10 @@ func (h *AnalysisHandler) UpdateCTR(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid analysis id"})
+		return
+	}
+	if err := h.authorizeAnalysis(c, id); err != nil {
+		respondError(c, err)
 		return
 	}
 	var req updateCTRRequest

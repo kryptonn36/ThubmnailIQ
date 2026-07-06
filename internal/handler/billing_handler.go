@@ -59,6 +59,11 @@ func (h *BillingHandler) Checkout(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "could not resolve workspace_id: " + err.Error()})
 		return
 	}
+	// Changing the billing plan is owner/admin-only, not any member.
+	if err := h.workspaces.EnsureRole(c.Request.Context(), middleware.UserID(c), workspaceID, "owner", "admin"); err != nil {
+		respondError(c, err)
+		return
+	}
 	checkout, err := h.uc.CreateCheckout(c.Request.Context(), workspaceID, req.Plan)
 	if err != nil {
 		respondError(c, err)
@@ -98,6 +103,10 @@ func (h *BillingHandler) ConfirmCheckout(c *gin.Context) {
 	workspaceID, err := resolveWorkspaceID(c, req.WorkspaceID, h.workspaces)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "could not resolve workspace_id: " + err.Error()})
+		return
+	}
+	if err := h.workspaces.EnsureRole(c.Request.Context(), middleware.UserID(c), workspaceID, "owner", "admin"); err != nil {
+		respondError(c, err)
 		return
 	}
 	sub, err := h.uc.ConfirmCheckout(c.Request.Context(), workspaceID, req.Plan, req.OrderID, req.PaymentID, req.Signature)

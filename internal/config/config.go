@@ -67,6 +67,13 @@ type Config struct {
 		Domain string `mapstructure:"domain"`
 	} `mapstructure:"cdn"`
 
+	// CORS.AllowedOrigins is a comma-separated allowlist of browser origins
+	// permitted to make cross-origin calls (e.g. the web app). We never reflect
+	// an arbitrary Origin back; only entries on this list are echoed.
+	CORS struct {
+		AllowedOrigins string `mapstructure:"allowed_origins"`
+	} `mapstructure:"cors"`
+
 	YouTube struct {
 		APIKey string `mapstructure:"api_key"`
 	} `mapstructure:"youtube"`
@@ -133,6 +140,7 @@ func Load() (*Config, error) {
 	v.SetDefault("s3.use_path_style", true)
 	v.SetDefault("s3.public_read", true)
 	v.SetDefault("cdn.domain", "http://localhost:9000/thumbnailiq-uploads")
+	v.SetDefault("cors.allowed_origins", "http://localhost:3000")
 	v.SetDefault("cv_service.url", "http://localhost:8001")
 	v.BindEnv("gemini.api_key", "GEMINI_API_KEY")
 	v.SetDefault("gemini.model", "gemini-2.0-flash")
@@ -156,5 +164,43 @@ func Load() (*Config, error) {
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("unmarshaling config: %w", err)
 	}
+	if err := cfg.validateSecrets(); err != nil {
+		return nil, err
+	}
 	return &cfg, nil
+}
+
+// devDefaultSecrets are the placeholder signing secrets shipped as viper
+// defaults for local development. They are public (they live in source), so
+// running with any of them signs tokens anyone can forge. In production the
+// app must refuse to boot until real secrets are injected via the environment.
+var devDefaultSecrets = map[string]bool{
+	"dev-access-secret-change-me":        true,
+	"dev-refresh-secret-change-me":       true,
+	"dev-admin-access-secret-change-me":  true,
+	"dev-admin-refresh-secret-change-me": true,
+}
+
+// validateSecrets fails fast when a signing secret is empty or still set to a
+// known dev default while running in production, so a misconfigured deploy can
+// never silently come up with forgeable JWTs.
+func (c *Config) validateSecrets() error {
+	if !strings.EqualFold(c.Server.Env, "production") {
+		return nil
+	}
+	secrets := map[string]string{
+		"JWT_ACCESS_SECRET":        c.JWT.AccessSecret,
+		"JWT_REFRESH_SECRET":       c.JWT.RefreshSecret,
+		"ADMIN_JWT_ACCESS_SECRET":  c.AdminJWT.AccessSecret,
+		"ADMIN_JWT_REFRESH_SECRET": c.AdminJWT.RefreshSecret,
+	}
+	for name, val := range secrets {
+		if val == "" {
+			return fmt.Errorf("%s must be set in production", name)
+		}
+		if devDefaultSecrets[val] {
+			return fmt.Errorf("%s is still set to its insecure development default; set a strong random secret in production", name)
+		}
+	}
+	return nil
 }

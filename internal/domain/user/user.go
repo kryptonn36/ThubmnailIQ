@@ -7,6 +7,14 @@ import (
 	"github.com/google/uuid"
 )
 
+// StatusActive / StatusSuspended mirror the users.status column
+// (see migration 20240101000014). A suspended user must not be able to log in
+// or refresh a session.
+const (
+	StatusActive    = "active"
+	StatusSuspended = "suspended"
+)
+
 type User struct {
 	ID            uuid.UUID
 	Email         string
@@ -14,6 +22,7 @@ type User struct {
 	FullName      string
 	AvatarURL     string
 	EmailVerified bool
+	Status        string
 	CreatedAt     time.Time
 }
 

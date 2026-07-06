@@ -16,7 +16,17 @@ import (
 // multi-workspace API consumers pass workspace_id explicitly.
 func resolveWorkspaceID(c *gin.Context, raw string, workspaces *workspaceuc.Usecase) (uuid.UUID, error) {
 	if raw != "" {
-		return uuid.Parse(raw)
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			return uuid.UUID{}, err
+		}
+		// A client-supplied workspace ID is never trusted: confirm the caller
+		// is actually a member before any handler acts on it. Without this,
+		// knowing another workspace's UUID would be enough to operate on it.
+		if err := workspaces.EnsureMember(c.Request.Context(), middleware.UserID(c), id); err != nil {
+			return uuid.UUID{}, err
+		}
+		return id, nil
 	}
 	list, err := workspaces.List(c.Request.Context(), middleware.UserID(c))
 	if err != nil {

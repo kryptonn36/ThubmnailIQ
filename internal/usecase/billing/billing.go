@@ -19,11 +19,12 @@ type Usecase struct {
 	billing    billing.Repository
 	workspaces workspace.Repository
 	gateway    payment.Gateway
+	orders     payment.PendingOrderStore
 	currency   string
 }
 
-func NewUsecase(billingRepo billing.Repository, workspaces workspace.Repository, gateway payment.Gateway, currency string) *Usecase {
-	return &Usecase{billing: billingRepo, workspaces: workspaces, gateway: gateway, currency: currency}
+func NewUsecase(billingRepo billing.Repository, workspaces workspace.Repository, gateway payment.Gateway, orders payment.PendingOrderStore, currency string) *Usecase {
+	return &Usecase{billing: billingRepo, workspaces: workspaces, gateway: gateway, orders: orders, currency: currency}
 }
 
 func (u *Usecase) Plans() []billing.Plan {
@@ -132,29 +133,56 @@ func (u *Usecase) CreateCheckout(ctx context.Context, workspaceID uuid.UUID, pla
 		amountDue = planDef.PriceMonthly - currentPlanDef.PriceMonthly
 	}
 
+	amountMinor := int64(amountDue * 100)
 	order, err := u.gateway.CreateOrder(ctx, payment.CreateOrderParams{
 		Plan:        plan,
-		AmountMinor: int64(amountDue * 100),
+		AmountMinor: amountMinor,
 		Currency:    u.currency,
 		Receipt:     fmt.Sprintf("ws_%s_%d", strings.ReplaceAll(workspaceID.String(), "-", "")[:8], time.Now().UnixNano()),
 	})
 	if err != nil {
 		return nil, err
 	}
+	// Record what this order was actually for. ConfirmCheckout reads this back
+	// so the activated plan is bound to the order the user paid, not to whatever
+	// plan the client echoes at confirmation time. If we can't persist it, fail
+	// now rather than let the user pay for something we can't later verify.
+	if err := u.orders.Save(ctx, order.ID, payment.PendingOrder{
+		WorkspaceID: workspaceID,
+		Plan:        plan,
+		AmountMinor: amountMinor,
+	}); err != nil {
+		return nil, err
+	}
 	return &Checkout{RequiresPayment: true, Plan: plan, Order: order}, nil
 }
 
 // ConfirmCheckout verifies a payment the frontend reports as successful and,
-// once verified, activates the plan it paid for.
+// once verified, activates the plan it paid for. The client-supplied `plan` is
+// deliberately NOT trusted: the plan and workspace that get activated are read
+// back from the server-side order record created in CreateCheckout, so a caller
+// can't pay for a cheap plan and confirm an expensive one (or target another
+// workspace) by tampering with the confirmation request.
 func (u *Usecase) ConfirmCheckout(ctx context.Context, workspaceID uuid.UUID, plan, orderID, paymentID, signature string) (*billing.Subscription, error) {
-	planDef := findPlan(plan)
-	if planDef == nil {
-		return nil, errors.ErrInvalidInput
-	}
 	if err := u.gateway.VerifyPayment(ctx, payment.VerifyParams{
 		OrderID: orderID, PaymentID: paymentID, Signature: signature,
 	}); err != nil {
 		return nil, err
+	}
+
+	// Consume the order we recorded at checkout time. A missing record means the
+	// order was never created here, already confirmed, or expired — reject it.
+	pending, err := u.orders.Consume(ctx, orderID)
+	if err != nil {
+		return nil, errors.ErrInvalidInput
+	}
+	// The confirmation must target the same workspace the order was opened for.
+	if pending.WorkspaceID != workspaceID {
+		return nil, errors.ErrForbidden
+	}
+	planDef := findPlan(pending.Plan)
+	if planDef == nil {
+		return nil, errors.ErrInvalidInput
 	}
 	return u.activate(ctx, workspaceID, planDef, paymentID)
 }

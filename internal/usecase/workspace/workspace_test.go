@@ -115,6 +115,15 @@ func (r *fakeWorkspaceRepo) ListMembers(_ context.Context, _ uuid.UUID) ([]*doma
 	return r.members, nil
 }
 
+func (r *fakeWorkspaceRepo) IsMember(_ context.Context, _, userID uuid.UUID) (bool, error) {
+	for _, m := range r.members {
+		if m.UserID == userID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (r *fakeWorkspaceRepo) IncrementAnalysesUsage(context.Context, uuid.UUID) error { return nil }
 
 func (r *fakeWorkspaceRepo) UpdatePlan(_ context.Context, id uuid.UUID, plan string, limit int) (*domainworkspace.Workspace, error) {

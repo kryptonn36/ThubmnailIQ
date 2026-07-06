@@ -33,15 +33,16 @@ type Handlers struct {
 	AdminProfile   *handler.AdminProfileHandler
 }
 
-func NewRouter(h *Handlers, jwtSvc, adminJWTSvc *jwt.Service, billingRepo billing.Repository, rateLimiter *redis.RateLimiter, log zerolog.Logger) *gin.Engine {
+func NewRouter(h *Handlers, jwtSvc, adminJWTSvc *jwt.Service, billingRepo billing.Repository, rateLimiter *redis.RateLimiter, allowedOrigins []string, log zerolog.Logger) *gin.Engine {
 	r := gin.New()
-	r.Use(gin.Recovery(), middleware.RequestLogger(log), middleware.CORS())
+	r.Use(gin.Recovery(), middleware.RequestLogger(log), middleware.CORS(allowedOrigins))
 
 	r.GET("/health", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) })
 
 	v1 := r.Group("/api/v1")
 
 	auth := v1.Group("/auth")
+	auth.Use(middleware.RateLimit(rateLimiter, 10, time.Minute))
 	auth.POST("/register", h.Auth.Register)
 	auth.POST("/login", h.Auth.Login)
 	auth.POST("/refresh", h.Auth.Refresh)

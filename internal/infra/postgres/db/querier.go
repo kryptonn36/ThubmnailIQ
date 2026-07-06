@@ -61,6 +61,7 @@ type Querier interface {
 	GetUserDetailAdmin(ctx context.Context, id uuid.UUID) (GetUserDetailAdminRow, error)
 	GetWorkspaceByID(ctx context.Context, id uuid.UUID) (Workspace, error)
 	IncrementWorkspaceAnalysesUsage(ctx context.Context, id uuid.UUID) error
+	IsWorkspaceMember(ctx context.Context, arg IsWorkspaceMemberParams) (bool, error)
 	ListAnalysesByWorkspace(ctx context.Context, arg ListAnalysesByWorkspaceParams) ([]Analysis, error)
 	ListApiKeysByWorkspace(ctx context.Context, workspaceID uuid.UUID) ([]ApiKey, error)
 	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AdminAuditLog, error)

@@ -71,6 +71,9 @@ func (u *Usecase) Login(ctx context.Context, email, password string) (*AuthResul
 	if !hash.CheckPassword(usr.PasswordHash, password) {
 		return nil, errors.ErrUnauthorized
 	}
+	if usr.Status == user.StatusSuspended {
+		return nil, errors.ErrForbidden
+	}
 	return u.issueTokens(ctx, usr)
 }
 
@@ -83,6 +86,13 @@ func (u *Usecase) Refresh(ctx context.Context, refreshToken string) (*AuthResult
 	usr, err := u.users.GetByID(ctx, rt.UserID)
 	if err != nil {
 		return nil, errors.ErrUnauthorized
+	}
+	// A user suspended after they logged in still holds a valid refresh token;
+	// block the rotation here so suspension takes effect within one access-token
+	// TTL instead of lasting until the refresh token itself expires.
+	if usr.Status == user.StatusSuspended {
+		_ = u.users.RevokeRefreshToken(ctx, tokenHash)
+		return nil, errors.ErrForbidden
 	}
 	_ = u.users.RevokeRefreshToken(ctx, tokenHash)
 	return u.issueTokens(ctx, usr)

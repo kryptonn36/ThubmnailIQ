@@ -37,3 +37,9 @@ RETURNING *;
 UPDATE workspaces SET plan = $2, analyses_limit = $3, updated_at = NOW()
 WHERE id = $1
 RETURNING *;
+
+-- name: IsWorkspaceMember :one
+SELECT EXISTS (
+    SELECT 1 FROM workspace_members
+    WHERE workspace_id = $1 AND user_id = $2
+) AS is_member;

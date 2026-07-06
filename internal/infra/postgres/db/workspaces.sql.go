@@ -156,6 +156,25 @@ func (q *Queries) ListWorkspaceMembers(ctx context.Context, workspaceID uuid.UUI
 	return items, nil
 }
 
+const isWorkspaceMember = `-- name: IsWorkspaceMember :one
+SELECT EXISTS (
+    SELECT 1 FROM workspace_members
+    WHERE workspace_id = $1 AND user_id = $2
+) AS is_member
+`
+
+type IsWorkspaceMemberParams struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	UserID      uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) IsWorkspaceMember(ctx context.Context, arg IsWorkspaceMemberParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isWorkspaceMember, arg.WorkspaceID, arg.UserID)
+	var is_member bool
+	err := row.Scan(&is_member)
+	return is_member, err
+}
+
 const listWorkspacesForUser = `-- name: ListWorkspacesForUser :many
 SELECT w.id, w.name, w.slug, w.logo_url, w.plan, w.owner_id, w.analyses_this_month, w.analyses_limit, w.api_requests_this_month, w.api_requests_limit, w.created_at, w.updated_at, w.deleted_at, w.brand_primary_color, w.brand_secondary_color, w.brand_font FROM workspaces w
 JOIN workspace_members wm ON wm.workspace_id = w.id

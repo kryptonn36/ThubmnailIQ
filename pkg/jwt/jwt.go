@@ -49,9 +49,12 @@ func (s *Service) RefreshTTL() time.Duration {
 
 func (s *Service) ParseAccessToken(tokenStr string) (*Claims, error) {
 	claims := &Claims{}
+	// WithValidMethods pins verification to HS256 so a forged token can't ask
+	// to be validated under a different algorithm (e.g. "none", or an RS/HS
+	// key-confusion attack); anything else is rejected before the keyfunc runs.
 	_, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
 		return []byte(s.accessSecret), nil
-	})
+	}, jwt.WithValidMethods([]string{"HS256"}))
 	if err != nil {
 		return nil, err
 	}

@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -25,7 +24,7 @@ func APIKeyAuth(repo billing.Repository) gin.HandlerFunc {
 			return
 		}
 		raw := strings.TrimPrefix(header, "Bearer ")
-		key, err := repo.GetAPIKeyByHash(context.Background(), hash.SHA256Hex(raw))
+		key, err := repo.GetAPIKeyByHash(c.Request.Context(), hash.SHA256Hex(raw))
 		if err != nil {
 			c.Error(fmt.Errorf("api key auth failed for %s %s: %w", c.Request.Method, c.Request.URL.Path, err))
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid api key"})

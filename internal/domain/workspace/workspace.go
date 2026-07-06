@@ -36,6 +36,7 @@ type Repository interface {
 	ListForUser(ctx context.Context, userID uuid.UUID) ([]*Workspace, error)
 	AddMember(ctx context.Context, workspaceID, userID uuid.UUID, role string) (*Member, error)
 	ListMembers(ctx context.Context, workspaceID uuid.UUID) ([]*Member, error)
+	IsMember(ctx context.Context, workspaceID, userID uuid.UUID) (bool, error)
 	IncrementAnalysesUsage(ctx context.Context, workspaceID uuid.UUID) error
 	UpdatePlan(ctx context.Context, workspaceID uuid.UUID, plan string, analysesLimit int) (*Workspace, error)
 	UpdateBrand(ctx context.Context, workspaceID uuid.UUID, primary, secondary, font string) (*Workspace, error)

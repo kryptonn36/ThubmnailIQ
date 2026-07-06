@@ -1,6 +1,28 @@
 package payment
 
-import "context"
+import (
+	"context"
+
+	"github.com/google/uuid"
+)
+
+// PendingOrder records what a checkout order was created for. It is persisted
+// when an order is opened and read back at confirmation time, so the plan and
+// amount that get activated come from the server's record of the order — never
+// from client-supplied values that could be tampered with.
+type PendingOrder struct {
+	WorkspaceID uuid.UUID
+	Plan        string
+	AmountMinor int64
+}
+
+// PendingOrderStore persists PendingOrders between checkout creation and
+// confirmation. Consume must atomically fetch-and-delete the record so a single
+// payment cannot be replayed to activate a plan more than once.
+type PendingOrderStore interface {
+	Save(ctx context.Context, orderID string, order PendingOrder) error
+	Consume(ctx context.Context, orderID string) (*PendingOrder, error)
+}
 
 // CreateOrderParams describes a one-time charge for a billing cycle.
 type CreateOrderParams struct {
