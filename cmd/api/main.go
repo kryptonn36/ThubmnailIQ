@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/hibiken/asynq"
 	goredis "github.com/redis/go-redis/v9"
@@ -36,6 +38,11 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		panic(fmt.Errorf("loading config: %w", err))
+	}
+	if cfg.Server.Env == "production"{
+		if err = productionCfgCheck(cfg); err != nil {
+			panic(fmt.Errorf("Production env: %v", err))
+		}
 	}
 	log := logger.New(cfg.Server.Env)
 
@@ -117,7 +124,7 @@ func main() {
 	analysisUC := analysisuc.NewUsecase(analysisRepo, workspaceRepo, storage, cdnBuilder, cvClient, queueClient)
 	billingUC := billinguc.NewUsecase(billingRepo, workspaceRepo, gateway, cfg.Payment.Currency)
 	trackingUC := trackinguc.NewUsecase(competitorRepo)
-	viralDBUC := viraldbuc.NewUsecase(viralDBRepo)
+	viralDBUC := viraldbuc.NewUsecase(viralDBRepo, ytFetcher)
 	adminUC := adminuc.NewUsecase(adminRepo, adminJWTSvc, healthChecker)
 
 	handlers := &server.Handlers{
@@ -146,4 +153,12 @@ func main() {
 	if err := router.Run(addr); err != nil {
 		log.Fatal().Err(err).Msg("server stopped")
 	}
+}
+
+
+func productionCfgCheck(cfg *config.Config) error{
+	if strings.Contains(cfg.Database.URL, "sslmode=disable"){
+		return errors.New("database SSL must be enabled in production")
+	}
+	return nil 
 }

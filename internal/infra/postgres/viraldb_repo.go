@@ -23,6 +23,10 @@ func (r *ViralDBRepo) Search(ctx context.Context, f viraldb.SearchFilter) ([]*vi
 	if limit <= 0 {
 		limit = 50
 	}
+	var keyword pgtype.Text
+	if f.Keyword != nil && *f.Keyword != "" {
+		keyword = pgtype.Text{String: *f.Keyword, Valid: true}
+	}
 	var minScore pgtype.Int4
 	if f.MinScore != nil {
 		minScore = pgtype.Int4{Int32: int32(*f.MinScore), Valid: true}
@@ -37,7 +41,7 @@ func (r *ViralDBRepo) Search(ctx context.Context, f viraldb.SearchFilter) ([]*vi
 	}
 
 	rows, err := r.q.SearchViralThumbnails(ctx, db.SearchViralThumbnailsParams{
-		Limit: int32(limit), Offset: int32(f.Offset), Niche: niche, MinScore: minScore, HasFace: hasFace,
+		Limit: int32(limit), Offset: int32(f.Offset), Keyword: keyword, Niche: niche, MinScore: minScore, HasFace: hasFace,
 	})
 	if err != nil {
 		return nil, err
@@ -51,4 +55,28 @@ func (r *ViralDBRepo) Search(ctx context.Context, f viraldb.SearchFilter) ([]*vi
 		})
 	}
 	return out, nil
+}
+
+func (r *ViralDBRepo) Upsert(ctx context.Context, t *viraldb.ThumbnailInput) (*viraldb.Thumbnail, error) {
+	row, err := r.q.UpsertViralThumbnail(ctx, db.UpsertViralThumbnailParams{
+		VideoID:      t.VideoID,
+		ChannelID:    t.ChannelID,
+		ChannelName:  t.ChannelName,
+		VideoTitle:   t.VideoTitle,
+		ThumbnailUrl: t.ThumbnailURL,
+		Niche:        textOrNil(t.Niche),
+		Tags:         t.Tags,
+		ViewCount:    int8OrNil(t.ViewCount),
+		Score:        int4OrNil(&t.Score),
+		HasFace:      t.HasFace,
+		CvResults:    t.CVResults,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &viraldb.Thumbnail{
+		ID: row.ID.String(), VideoID: row.VideoID, ChannelName: row.ChannelName, VideoTitle: row.VideoTitle,
+		ThumbnailURL: row.ThumbnailUrl, Niche: textVal(row.Niche), Score: int4Val(row.Score),
+		ViewCount: int8Val(row.ViewCount), HasFace: row.HasFace,
+	}, nil
 }

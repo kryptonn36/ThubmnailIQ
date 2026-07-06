@@ -20,6 +20,9 @@ func NewViralDBHandler(uc *viraldbuc.Usecase) *ViralDBHandler {
 
 func (h *ViralDBHandler) Search(c *gin.Context) {
 	f := viraldb.SearchFilter{Limit: 50}
+	if keyword := c.Query("keyword"); keyword != "" {
+		f.Keyword = &keyword
+	}
 	if niche := c.Query("niche"); niche != "" {
 		f.Niche = &niche
 	}

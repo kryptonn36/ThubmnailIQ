@@ -1,5 +1,6 @@
-import { clearAuth, getAccessToken } from "@/lib/auth";
+import { clearAuth, getAccessToken, getRefreshToken, storeAuth } from "@/lib/auth";
 import { logger } from "@/lib/logger";
+import type { AuthResponse } from "@/types";
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
@@ -19,6 +20,7 @@ interface RequestOptions {
   formData?: FormData;
   query?: Record<string, string | number | boolean | undefined>;
   auth?: boolean;
+  retryOnUnauthorized?: boolean;
 }
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
@@ -35,8 +37,31 @@ function buildUrl(path: string, query?: RequestOptions["query"]): string {
   return url.toString();
 }
 
+let refreshPromise: Promise<string> | null = null;
+
+async function refreshAccessToken(): Promise<string> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) {
+    throw new Error("no refresh token");
+  }
+
+  const res = await fetch(buildUrl("/auth/refresh"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+
+  if (!res.ok) {
+    throw new ApiError("Unable to refresh session", res.status);
+  }
+
+  const auth = (await res.json()) as AuthResponse;
+  storeAuth(auth);
+  return auth.access_token;
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = "GET", body, formData, query, auth = true } = options;
+  const { method = "GET", body, formData, query, auth = true, retryOnUnauthorized = true } = options;
 
   const headers: Record<string, string> = {};
   if (!formData && body !== undefined) {
@@ -55,8 +80,22 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     body: formData ?? (body !== undefined ? JSON.stringify(body) : undefined),
   });
 
+  if (res.status === 401 && auth && retryOnUnauthorized) {
+    try {
+      refreshPromise ??= refreshAccessToken();
+      await refreshPromise;
+      refreshPromise = null;
+      return request<T>(path, { ...options, retryOnUnauthorized: false });
+    } catch (err) {
+      refreshPromise = null;
+      logger.warn("session refresh failed, clearing auth and redirecting to login", {
+        path,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   if (res.status === 401 && auth) {
-    logger.warn("received 401, clearing auth and redirecting to login", { path });
     clearAuth();
     if (typeof window !== "undefined") {
       window.location.href = "/login";

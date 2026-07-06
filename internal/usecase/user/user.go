@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/thumbnailiq/thumbnailiq/internal/domain/user"
@@ -31,7 +32,9 @@ type AuthResult struct {
 }
 
 func (u *Usecase) Register(ctx context.Context, email, password, fullName string) (*AuthResult, error) {
-	if !validator.IsValidEmail(email) || !validator.IsValidPassword(password) {
+	email = validator.NormalizeEmail(email)
+	fullName = strings.TrimSpace(fullName)
+	if !validator.IsValidEmail(email) || !validator.IsValidPassword(password) || fullName == "" {
 		return nil, errors.ErrInvalidInput
 	}
 	if existing, _ := u.users.GetByEmail(ctx, email); existing != nil {
@@ -60,6 +63,7 @@ func (u *Usecase) Register(ctx context.Context, email, password, fullName string
 }
 
 func (u *Usecase) Login(ctx context.Context, email, password string) (*AuthResult, error) {
+	email = validator.NormalizeEmail(email)
 	usr, err := u.users.GetByEmail(ctx, email)
 	if err != nil {
 		return nil, errors.ErrUnauthorized

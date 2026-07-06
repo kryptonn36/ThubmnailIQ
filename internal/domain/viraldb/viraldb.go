@@ -15,6 +15,7 @@ type Thumbnail struct {
 }
 
 type SearchFilter struct {
+	Keyword  *string
 	Niche    *string
 	MinScore *int
 	HasFace  *bool
@@ -24,4 +25,19 @@ type SearchFilter struct {
 
 type Repository interface {
 	Search(ctx context.Context, f SearchFilter) ([]*Thumbnail, error)
+	Upsert(ctx context.Context, t *ThumbnailInput) (*Thumbnail, error)
+}
+
+type ThumbnailInput struct {
+	VideoID      string
+	ChannelID    string
+	ChannelName  string
+	VideoTitle   string
+	ThumbnailURL string
+	Niche        string
+	Tags         []string
+	ViewCount    int64
+	Score        int
+	HasFace      bool
+	CVResults    []byte
 }

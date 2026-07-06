@@ -13,9 +13,10 @@ import (
 
 const searchViralThumbnails = `-- name: SearchViralThumbnails :many
 SELECT id, video_id, channel_id, channel_name, video_title, thumbnail_url, thumbnail_s3_key, niche, tags, view_count, view_count_when_captured, score, has_face, cv_results, captured_at, created_at FROM viral_thumbnails
-WHERE ($3::varchar IS NULL OR niche = $3)
-  AND ($4::int IS NULL OR score >= $4)
-  AND ($5::bool IS NULL OR has_face = $5)
+WHERE ($3::text IS NULL OR tags @> ARRAY[$3::text])
+  AND ($4::varchar IS NULL OR niche = $4)
+  AND ($5::int IS NULL OR score >= $5)
+  AND ($6::bool IS NULL OR has_face = $6)
 ORDER BY score DESC
 LIMIT $1 OFFSET $2
 `
@@ -23,6 +24,7 @@ LIMIT $1 OFFSET $2
 type SearchViralThumbnailsParams struct {
 	Limit    int32       `json:"limit"`
 	Offset   int32       `json:"offset"`
+	Keyword  pgtype.Text `json:"keyword"`
 	Niche    pgtype.Text `json:"niche"`
 	MinScore pgtype.Int4 `json:"min_score"`
 	HasFace  pgtype.Bool `json:"has_face"`
@@ -32,6 +34,7 @@ func (q *Queries) SearchViralThumbnails(ctx context.Context, arg SearchViralThum
 	rows, err := q.db.Query(ctx, searchViralThumbnails,
 		arg.Limit,
 		arg.Offset,
+		arg.Keyword,
 		arg.Niche,
 		arg.MinScore,
 		arg.HasFace,
@@ -75,7 +78,12 @@ const upsertViralThumbnail = `-- name: UpsertViralThumbnail :one
 INSERT INTO viral_thumbnails (video_id, channel_id, channel_name, video_title, thumbnail_url, niche, tags, view_count, score, has_face, cv_results)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (video_id) DO UPDATE
-SET score = EXCLUDED.score, view_count = EXCLUDED.view_count, cv_results = EXCLUDED.cv_results
+SET score = EXCLUDED.score,
+    view_count = EXCLUDED.view_count,
+    cv_results = EXCLUDED.cv_results,
+    tags = (SELECT array_agg(DISTINCT tag) FROM unnest(viral_thumbnails.tags || EXCLUDED.tags) AS tag),
+    niche = COALESCE(viral_thumbnails.niche, EXCLUDED.niche),
+    has_face = EXCLUDED.has_face
 RETURNING id, video_id, channel_id, channel_name, video_title, thumbnail_url, thumbnail_s3_key, niche, tags, view_count, view_count_when_captured, score, has_face, cv_results, captured_at, created_at
 `
 

@@ -35,6 +35,7 @@ type AuthResult struct {
 // self-service registration; admin accounts are created out-of-band via the
 // admin-seed CLI.
 func (u *Usecase) Login(ctx context.Context, email, password string) (*AuthResult, error) {
+	email = validator.NormalizeEmail(email)
 	a, err := u.admins.GetAdminByEmail(ctx, email)
 	if err != nil {
 		return nil, errors.ErrUnauthorized

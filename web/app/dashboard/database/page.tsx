@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import { Search } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
@@ -21,6 +23,8 @@ function formatViews(views: number): string {
 
 export default function ViralDatabasePage() {
   const { fadeInUp, staggerContainer } = useMotionVariants();
+  const [keywordInput, setKeywordInput] = useState("");
+  const [keyword, setKeyword] = useState("");
   const [niche, setNiche] = useState("All");
   const [minScore, setMinScore] = useState(0);
   const [hasFace, setHasFace] = useState<"" | "true" | "false">("");
@@ -34,6 +38,7 @@ export default function ViralDatabasePage() {
       setLoading(true);
       try {
         const data = await api.get<{ data: ViralThumbnail[] }>("/viral-db", {
+          keyword: keyword.trim() || undefined,
           niche: niche === "All" ? undefined : niche,
           min_score: minScore > 0 ? minScore : undefined,
           has_face: hasFace || undefined,
@@ -51,7 +56,7 @@ export default function ViralDatabasePage() {
     return () => {
       cancelled = true;
     };
-  }, [niche, minScore, hasFace]);
+  }, [keyword, niche, minScore, hasFace]);
 
   return (
     <div className="space-y-6">
@@ -60,7 +65,31 @@ export default function ViralDatabasePage() {
         description="Browse high-performing thumbnails collected across all analyses."
       />
 
-      <div className="flex flex-wrap items-end gap-4 rounded-2xl border border-surface-300 bg-surface-100 p-5 shadow-card">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          setKeyword(keywordInput.trim());
+        }}
+        className="flex flex-wrap items-end gap-4 rounded-2xl border border-surface-300 bg-surface-100 p-5 shadow-card"
+      >
+        <div>
+          <label htmlFor="keyword" className="mb-1 block text-xs font-medium text-gray-400">
+            Keyword
+          </label>
+          <input
+            id="keyword"
+            type="search"
+            value={keywordInput}
+            onChange={(e) => setKeywordInput(e.target.value)}
+            placeholder="Search YouTube"
+            className="w-56 rounded-lg border border-surface-300 bg-surface-200 px-3 py-2.5 text-sm text-white outline-none transition-colors placeholder:text-gray-600 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+          />
+        </div>
+
+        <Button type="submit" icon={<Search className="h-4 w-4" aria-hidden="true" />}>
+          Search
+        </Button>
+
         <div>
           <label htmlFor="niche" className="mb-1 block text-xs font-medium text-gray-400">
             Niche
@@ -104,7 +133,7 @@ export default function ViralDatabasePage() {
             <option value="false">No</option>
           </Select>
         </div>
-      </div>
+      </form>
 
       {error && <Alert variant="danger">{error}</Alert>}
 

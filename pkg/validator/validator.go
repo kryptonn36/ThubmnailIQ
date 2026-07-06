@@ -11,6 +11,10 @@ func IsValidEmail(email string) bool {
 	return emailRe.MatchString(email)
 }
 
+func NormalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
 func IsValidPassword(password string) bool {
 	return len(password) >= 8
 }
