@@ -133,6 +133,16 @@ type CompetitorSnapshot struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
+type EmailVerificationCode struct {
+	ID         uuid.UUID          `json:"id"`
+	UserID     uuid.UUID          `json:"user_id"`
+	CodeHash   string             `json:"code_hash"`
+	Attempts   int32              `json:"attempts"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	ConsumedAt pgtype.Timestamptz `json:"consumed_at"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
 type Project struct {
 	ID          uuid.UUID          `json:"id"`
 	WorkspaceID uuid.UUID          `json:"workspace_id"`

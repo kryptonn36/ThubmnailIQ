@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { LogIn } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -13,7 +14,8 @@ import { Input } from "@/components/ui/Input";
 import { useMotionVariants } from "@/lib/motion";
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, resendVerification } = useAuth();
+  const router = useRouter();
   const { fadeInUp } = useMotionVariants();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,6 +29,13 @@ export default function LoginPage() {
     try {
       await login(email, password);
     } catch (err) {
+      // An unverified account can't log in — send a fresh code and route to the
+      // verification screen instead of showing a dead-end error.
+      if (err instanceof ApiError && err.code === "email_not_verified") {
+        await resendVerification(email).catch(() => {});
+        router.push(`/verify-email?email=${encodeURIComponent(email)}`);
+        return;
+      }
       setError(err instanceof ApiError ? err.message : "Unable to log in. Please try again.");
     } finally {
       setSubmitting(false);

@@ -107,3 +107,53 @@ func (r *UserRepo) GetRefreshToken(ctx context.Context, tokenHash string) (*user
 func (r *UserRepo) RevokeRefreshToken(ctx context.Context, tokenHash string) error {
 	return r.q.RevokeRefreshToken(ctx, tokenHash)
 }
+
+func toDomainVerificationCode(c db.EmailVerificationCode) *user.EmailVerificationCode {
+	return &user.EmailVerificationCode{
+		ID:        c.ID,
+		UserID:    c.UserID,
+		CodeHash:  c.CodeHash,
+		Attempts:  int(c.Attempts),
+		ExpiresAt: tsVal(c.ExpiresAt),
+		Consumed:  c.ConsumedAt.Valid,
+	}
+}
+
+func (r *UserRepo) CreateEmailVerificationCode(ctx context.Context, userID uuid.UUID, codeHash string, expiresAt time.Time) (*user.EmailVerificationCode, error) {
+	c, err := r.q.CreateEmailVerificationCode(ctx, db.CreateEmailVerificationCodeParams{
+		UserID:    userID,
+		CodeHash:  codeHash,
+		ExpiresAt: tsNow(expiresAt),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return toDomainVerificationCode(c), nil
+}
+
+func (r *UserRepo) GetLatestEmailVerificationCode(ctx context.Context, userID uuid.UUID) (*user.EmailVerificationCode, error) {
+	c, err := r.q.GetLatestEmailVerificationCode(ctx, userID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, apperrors.ErrNotFound
+		}
+		return nil, err
+	}
+	return toDomainVerificationCode(c), nil
+}
+
+func (r *UserRepo) IncrementEmailVerificationAttempts(ctx context.Context, id uuid.UUID) error {
+	return r.q.IncrementEmailVerificationAttempts(ctx, id)
+}
+
+func (r *UserRepo) ConsumeEmailVerificationCode(ctx context.Context, id uuid.UUID) error {
+	return r.q.ConsumeEmailVerificationCode(ctx, id)
+}
+
+func (r *UserRepo) InvalidateEmailVerificationCodes(ctx context.Context, userID uuid.UUID) error {
+	return r.q.InvalidateEmailVerificationCodes(ctx, userID)
+}
+
+func (r *UserRepo) MarkEmailVerified(ctx context.Context, userID uuid.UUID) error {
+	return r.q.MarkUserEmailVerified(ctx, userID)
+}

@@ -19,6 +19,10 @@ func respondError(c *gin.Context, err error) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 	case apperrors.Is(err, apperrors.ErrForbidden):
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+	case apperrors.Is(err, apperrors.ErrEmailNotVerified):
+		// Distinct machine-readable code so the web app can route the user to
+		// the email-verification screen instead of showing a generic error.
+		c.JSON(http.StatusForbidden, gin.H{"error": "email not verified", "code": "email_not_verified"})
 	case apperrors.Is(err, apperrors.ErrInvalidInput):
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid input"})
 	case apperrors.Is(err, apperrors.ErrQuotaExceeded):

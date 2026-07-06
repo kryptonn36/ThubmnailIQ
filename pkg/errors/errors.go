@@ -8,6 +8,7 @@ var (
 	ErrUnauthorized     = errors.New("unauthorized")
 	ErrForbidden        = errors.New("forbidden")
 	ErrInvalidInput     = errors.New("invalid input")
+	ErrEmailNotVerified = errors.New("email not verified")
 	ErrRateLimited      = errors.New("rate limited")
 	ErrQuotaExceeded    = errors.New("quota exceeded")
 	ErrPlanAlreadyActive = errors.New("plan already active")

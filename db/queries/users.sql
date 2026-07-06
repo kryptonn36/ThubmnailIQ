@@ -9,6 +9,9 @@ SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL;
 -- name: GetUserByEmail :one
 SELECT * FROM users WHERE email = $1 AND deleted_at IS NULL;
 
+-- name: MarkUserEmailVerified :exec
+UPDATE users SET email_verified = TRUE, updated_at = NOW() WHERE id = $1;
+
 -- name: CreateRefreshToken :one
 INSERT INTO refresh_tokens (user_id, token_hash, device_info, expires_at)
 VALUES ($1, $2, $3, $4)

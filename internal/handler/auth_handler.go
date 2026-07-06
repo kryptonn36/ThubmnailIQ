@@ -51,12 +51,17 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	res, err := h.uc.Register(c.Request.Context(), req.Email, req.Password, req.FullName)
+	usr, err := h.uc.Register(c.Request.Context(), req.Email, req.Password, req.FullName)
 	if err != nil {
 		respondError(c, err)
 		return
 	}
-	authResponse(c, http.StatusCreated, res)
+	// No tokens yet — the account must verify its email first. The client
+	// should send the user to the verification screen with this email.
+	c.JSON(http.StatusCreated, gin.H{
+		"requires_verification": true,
+		"email":                 usr.Email,
+	})
 }
 
 func (h *AuthHandler) Login(c *gin.Context) {
@@ -85,4 +90,45 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		return
 	}
 	authResponse(c, http.StatusOK, res)
+}
+
+type verifyEmailRequest struct {
+	Email string `json:"email" binding:"required"`
+	Code  string `json:"code" binding:"required"`
+}
+
+// VerifyEmail confirms an account's email via the OTP code emailed at signup.
+func (h *AuthHandler) VerifyEmail(c *gin.Context) {
+	var req verifyEmailRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	res, err := h.uc.VerifyEmail(c.Request.Context(), req.Email, req.Code)
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+	// Verification succeeded: the user is now logged in (tokens issued).
+	authResponse(c, http.StatusOK, res)
+}
+
+type resendVerificationRequest struct {
+	Email string `json:"email" binding:"required"`
+}
+
+// ResendVerification emails a fresh OTP. The response is always 200 regardless
+// of whether the email exists or is already verified, to avoid account
+// enumeration.
+func (h *AuthHandler) ResendVerification(c *gin.Context) {
+	var req resendVerificationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.uc.ResendVerification(c.Request.Context(), req.Email); err != nil {
+		respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "if the account exists and is unverified, a code has been sent"})
 }

@@ -46,6 +46,8 @@ func NewRouter(h *Handlers, jwtSvc, adminJWTSvc *jwt.Service, billingRepo billin
 	auth.POST("/register", h.Auth.Register)
 	auth.POST("/login", h.Auth.Login)
 	auth.POST("/refresh", h.Auth.Refresh)
+	auth.POST("/verify-email", h.Auth.VerifyEmail)
+	auth.POST("/resend-verification", h.Auth.ResendVerification)
 
 	// Admin panel — fully separate identity/session space from customer auth
 	// above. Login is rate-limited by client IP (no admin JWT exists yet at

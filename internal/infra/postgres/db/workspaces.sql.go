@@ -111,6 +111,25 @@ func (q *Queries) IncrementWorkspaceAnalysesUsage(ctx context.Context, id uuid.U
 	return err
 }
 
+const isWorkspaceMember = `-- name: IsWorkspaceMember :one
+SELECT EXISTS (
+    SELECT 1 FROM workspace_members
+    WHERE workspace_id = $1 AND user_id = $2
+) AS is_member
+`
+
+type IsWorkspaceMemberParams struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	UserID      uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) IsWorkspaceMember(ctx context.Context, arg IsWorkspaceMemberParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isWorkspaceMember, arg.WorkspaceID, arg.UserID)
+	var is_member bool
+	err := row.Scan(&is_member)
+	return is_member, err
+}
+
 const listWorkspaceMembers = `-- name: ListWorkspaceMembers :many
 SELECT wm.id, wm.workspace_id, wm.user_id, wm.role, wm.joined_at, u.email, u.full_name FROM workspace_members wm
 JOIN users u ON u.id = wm.user_id
@@ -154,25 +173,6 @@ func (q *Queries) ListWorkspaceMembers(ctx context.Context, workspaceID uuid.UUI
 		return nil, err
 	}
 	return items, nil
-}
-
-const isWorkspaceMember = `-- name: IsWorkspaceMember :one
-SELECT EXISTS (
-    SELECT 1 FROM workspace_members
-    WHERE workspace_id = $1 AND user_id = $2
-) AS is_member
-`
-
-type IsWorkspaceMemberParams struct {
-	WorkspaceID uuid.UUID `json:"workspace_id"`
-	UserID      uuid.UUID `json:"user_id"`
-}
-
-func (q *Queries) IsWorkspaceMember(ctx context.Context, arg IsWorkspaceMemberParams) (bool, error) {
-	row := q.db.QueryRow(ctx, isWorkspaceMember, arg.WorkspaceID, arg.UserID)
-	var is_member bool
-	err := row.Scan(&is_member)
-	return is_member, err
 }
 
 const listWorkspacesForUser = `-- name: ListWorkspacesForUser :many

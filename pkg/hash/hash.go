@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"math/big"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -41,4 +42,19 @@ func GenerateRandomToken() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+// GenerateNumericOTP returns a cryptographically-random zero-padded numeric
+// code of the given length (e.g. GenerateNumericOTP(6) -> "048213"). Modulo
+// bias over a 64-bit draw is negligible for 6-8 digit codes.
+func GenerateNumericOTP(digits int) (string, error) {
+	if digits <= 0 {
+		digits = 6
+	}
+	max := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(digits)), nil)
+	n, err := rand.Int(rand.Reader, max)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%0*d", digits, n), nil
 }

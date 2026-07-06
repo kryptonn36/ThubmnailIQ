@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { UserPlus } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -14,6 +15,7 @@ import { useMotionVariants } from "@/lib/motion";
 
 export default function RegisterPage() {
   const { register } = useAuth();
+  const router = useRouter();
   const { fadeInUp } = useMotionVariants();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -26,7 +28,9 @@ export default function RegisterPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await register(email, password, fullName);
+      const { email: registeredEmail } = await register(email, password, fullName);
+      // Account created but not logged in — go verify the emailed code.
+      router.push(`/verify-email?email=${encodeURIComponent(registeredEmail)}`);
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : "Unable to create your account. Please try again.",

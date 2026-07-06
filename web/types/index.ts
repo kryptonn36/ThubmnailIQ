@@ -14,6 +14,13 @@ export interface AuthResponse {
   user: User;
 }
 
+// Registration no longer logs the user in; it returns a signal that the email
+// must be verified (a code has been emailed) before tokens are issued.
+export interface RegisterResponse {
+  requires_verification: boolean;
+  email: string;
+}
+
 export interface Workspace {
   id: string;
   name: string;

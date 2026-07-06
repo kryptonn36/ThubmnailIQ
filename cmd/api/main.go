@@ -17,6 +17,7 @@ import (
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/gemini"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/health"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/payment/razorpay"
+	"github.com/thumbnailiq/thumbnailiq/internal/infra/email"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/payment/stripe"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/postgres"
 	"github.com/thumbnailiq/thumbnailiq/internal/infra/redis"
@@ -120,7 +121,20 @@ func main() {
 	// tokens can never be parsed as one another.
 	adminJWTSvc := jwt.NewService(cfg.AdminJWT.AccessSecret, cfg.AdminJWT.RefreshSecret, cfg.AdminJWT.AccessTTL, cfg.AdminJWT.RefreshTTL)
 
-	userUC := useruc.NewUsecase(userRepo, workspaceRepo, jwtSvc)
+	mailCfg := email.Config{
+		Host: cfg.SMTP.Host, Port: cfg.SMTP.Port,
+		Username: cfg.SMTP.Username, Password: cfg.SMTP.Password,
+		From: cfg.SMTP.From, FromName: cfg.SMTP.FromName,
+	}
+	var mailer useruc.Mailer
+	if mailCfg.Configured() {
+		mailer = email.NewSMTPMailer(mailCfg)
+		log.Info().Str("smtp_host", mailCfg.Host).Msg("email delivery configured")
+	} else {
+		log.Warn().Msg("SMTP not configured; email verification codes will be generated but not sent")
+	}
+
+	userUC := useruc.NewUsecase(userRepo, workspaceRepo, jwtSvc, mailer, log)
 	workspaceUC := workspaceuc.NewUsecase(workspaceRepo, userRepo)
 	analysisUC := analysisuc.NewUsecase(analysisRepo, workspaceRepo, storage, cdnBuilder, cvClient, queueClient)
 	billingUC := billinguc.NewUsecase(billingRepo, workspaceRepo, gateway, pendingOrders, cfg.Payment.Currency)

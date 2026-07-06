@@ -16,6 +16,7 @@ type Querier interface {
 	ActivateUserAdmin(ctx context.Context, id uuid.UUID) error
 	AddWorkspaceMember(ctx context.Context, arg AddWorkspaceMemberParams) (WorkspaceMember, error)
 	ChangeUserWorkspaceRoleAdmin(ctx context.Context, arg ChangeUserWorkspaceRoleAdminParams) error
+	ConsumeEmailVerificationCode(ctx context.Context, id uuid.UUID) error
 	CountActiveUsers(ctx context.Context) (int64, error)
 	CountAnalysesByWorkspace(ctx context.Context, arg CountAnalysesByWorkspaceParams) (int64, error)
 	CountAuditLogs(ctx context.Context) (int64, error)
@@ -33,6 +34,7 @@ type Querier interface {
 	CreateApiKey(ctx context.Context, arg CreateApiKeyParams) (ApiKey, error)
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AdminAuditLog, error)
 	CreateCompetitorSnapshot(ctx context.Context, arg CreateCompetitorSnapshotParams) (CompetitorSnapshot, error)
+	CreateEmailVerificationCode(ctx context.Context, arg CreateEmailVerificationCodeParams) (EmailVerificationCode, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error)
 	CreateThumbnailVersion(ctx context.Context, arg CreateThumbnailVersionParams) (ThumbnailVersion, error)
 	CreateTrackingJob(ctx context.Context, arg CreateTrackingJobParams) (TrackingJob, error)
@@ -53,6 +55,7 @@ type Querier interface {
 	GetApiKeyByHash(ctx context.Context, keyHash string) (ApiKey, error)
 	// Settings --------------------------------------------------------------
 	GetAppSettings(ctx context.Context) (AppSetting, error)
+	GetLatestEmailVerificationCode(ctx context.Context, userID uuid.UUID) (EmailVerificationCode, error)
 	GetRefreshToken(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetSubscriptionByWorkspace(ctx context.Context, workspaceID uuid.UUID) (Subscription, error)
 	GetUploadAdmin(ctx context.Context, id uuid.UUID) (Analysis, error)
@@ -60,7 +63,9 @@ type Querier interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserDetailAdmin(ctx context.Context, id uuid.UUID) (GetUserDetailAdminRow, error)
 	GetWorkspaceByID(ctx context.Context, id uuid.UUID) (Workspace, error)
+	IncrementEmailVerificationAttempts(ctx context.Context, id uuid.UUID) error
 	IncrementWorkspaceAnalysesUsage(ctx context.Context, id uuid.UUID) error
+	InvalidateEmailVerificationCodes(ctx context.Context, userID uuid.UUID) error
 	IsWorkspaceMember(ctx context.Context, arg IsWorkspaceMemberParams) (bool, error)
 	ListAnalysesByWorkspace(ctx context.Context, arg ListAnalysesByWorkspaceParams) ([]Analysis, error)
 	ListApiKeysByWorkspace(ctx context.Context, workspaceID uuid.UUID) ([]ApiKey, error)
@@ -88,6 +93,7 @@ type Querier interface {
 	ListWorkspaceMembers(ctx context.Context, workspaceID uuid.UUID) ([]ListWorkspaceMembersRow, error)
 	ListWorkspacesForUser(ctx context.Context, userID uuid.UUID) ([]Workspace, error)
 	MarkTrackingJobChecked(ctx context.Context, id uuid.UUID) error
+	MarkUserEmailVerified(ctx context.Context, id uuid.UUID) error
 	MonthlySignupTrend(ctx context.Context) ([]MonthlySignupTrendRow, error)
 	NextThumbnailVersionNumber(ctx context.Context, analysisID uuid.UUID) (int32, error)
 	ResetUserPasswordAdmin(ctx context.Context, arg ResetUserPasswordAdminParams) error

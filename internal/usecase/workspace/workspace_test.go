@@ -181,3 +181,19 @@ func (r *fakeUserRepo) GetRefreshToken(context.Context, string) (*domainuser.Ref
 }
 
 func (r *fakeUserRepo) RevokeRefreshToken(context.Context, string) error { return nil }
+
+func (r *fakeUserRepo) CreateEmailVerificationCode(context.Context, uuid.UUID, string, time.Time) (*domainuser.EmailVerificationCode, error) {
+	return nil, nil
+}
+
+func (r *fakeUserRepo) GetLatestEmailVerificationCode(context.Context, uuid.UUID) (*domainuser.EmailVerificationCode, error) {
+	return nil, apperrors.ErrNotFound
+}
+
+func (r *fakeUserRepo) IncrementEmailVerificationAttempts(context.Context, uuid.UUID) error { return nil }
+
+func (r *fakeUserRepo) ConsumeEmailVerificationCode(context.Context, uuid.UUID) error { return nil }
+
+func (r *fakeUserRepo) InvalidateEmailVerificationCodes(context.Context, uuid.UUID) error { return nil }
+
+func (r *fakeUserRepo) MarkEmailVerified(context.Context, uuid.UUID) error { return nil }

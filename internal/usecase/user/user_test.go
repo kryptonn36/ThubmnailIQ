@@ -5,7 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"regexp"
+
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 
 	domainuser "github.com/thumbnailiq/thumbnailiq/internal/domain/user"
 	"github.com/thumbnailiq/thumbnailiq/internal/domain/workspace"
@@ -14,44 +17,32 @@ import (
 	"github.com/thumbnailiq/thumbnailiq/pkg/jwt"
 )
 
-func TestRegisterNormalizesEmailAndIssuesRefreshToken(t *testing.T) {
+func TestRegisterNormalizesEmailCreatesWorkspaceAndQueuesCode(t *testing.T) {
 	users := newFakeUserRepo(t)
 	workspaces := &fakeWorkspaceRepo{}
 	uc := newTestUsecase(users, workspaces)
 
-	res, err := uc.Register(context.Background(), "  USER@Example.COM  ", "password123", "  Jane Creator  ")
+	usr, err := uc.Register(context.Background(), "  USER@Example.COM  ", "password123", "  Jane Creator  ")
 	if err != nil {
 		t.Fatalf("Register returned error: %v", err)
 	}
 
-	if res.User.Email != "user@example.com" {
-		t.Fatalf("expected normalized email, got %q", res.User.Email)
+	if usr.Email != "user@example.com" {
+		t.Fatalf("expected normalized email, got %q", usr.Email)
 	}
-	if res.User.FullName != "Jane Creator" {
-		t.Fatalf("expected trimmed full name, got %q", res.User.FullName)
+	if usr.FullName != "Jane Creator" {
+		t.Fatalf("expected trimmed full name, got %q", usr.FullName)
 	}
-	if res.AccessToken == "" {
-		t.Fatal("expected access token")
+	// Registration must NOT log the user in: no tokens until email is verified.
+	if usr.EmailVerified {
+		t.Fatal("new account should start unverified")
 	}
-	if res.RefreshToken == "" {
-		t.Fatal("expected refresh token")
+	if len(users.refreshByHash) != 0 {
+		t.Fatal("Register must not issue a refresh token before verification")
 	}
-	if res.ExpiresIn != 900 {
-		t.Fatalf("expected 900 second access token ttl, got %d", res.ExpiresIn)
-	}
-
-	stored := users.refreshByHash[hash.SHA256Hex(res.RefreshToken)]
-	if stored == nil {
-		t.Fatal("expected refresh token hash to be stored")
-	}
-	if stored.TokenHash == res.RefreshToken {
-		t.Fatal("refresh token was stored in raw form instead of hashed form")
-	}
-	if stored.UserID != res.User.ID {
-		t.Fatalf("refresh token stored for wrong user: got %s want %s", stored.UserID, res.User.ID)
-	}
-	if time.Until(stored.ExpiresAt) <= 6*24*time.Hour {
-		t.Fatalf("refresh token expiry is too short: %s", stored.ExpiresAt)
+	// A verification code should have been generated for the new user.
+	if users.verifications[usr.ID] == nil {
+		t.Fatal("expected a verification code to be queued on register")
 	}
 
 	if len(workspaces.created) != 1 {
@@ -135,7 +126,107 @@ func newTestUsecase(users *fakeUserRepo, workspaces *fakeWorkspaceRepo) *Usecase
 		users,
 		workspaces,
 		jwt.NewService("test-access-secret", "test-refresh-secret", 15*time.Minute, 7*24*time.Hour),
+		nil,
+		zerolog.Nop(),
 	)
+}
+
+type captureMailer struct {
+	calls    int
+	lastText string
+}
+
+func (m *captureMailer) Send(_ context.Context, _, _, textBody, _ string) error {
+	m.calls++
+	m.lastText = textBody
+	return nil
+}
+
+var otpPattern = regexp.MustCompile(`\b\d{6}\b`)
+
+func TestEmailVerificationFlow(t *testing.T) {
+	users := newFakeUserRepo(t)
+	mailer := &captureMailer{}
+	uc := NewUsecase(
+		users,
+		&fakeWorkspaceRepo{},
+		jwt.NewService("a", "b", 15*time.Minute, 7*24*time.Hour),
+		mailer,
+		zerolog.Nop(),
+	)
+
+	if _, err := uc.Register(context.Background(), "user@example.com", "password123", "Jane"); err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+	if mailer.calls != 1 {
+		t.Fatalf("expected 1 verification email on register, got %d", mailer.calls)
+	}
+	code := otpPattern.FindString(mailer.lastText)
+	if code == "" {
+		t.Fatalf("no 6-digit code found in verification email: %q", mailer.lastText)
+	}
+
+	// A wrong code is rejected and must not verify the account.
+	wrong := "000000"
+	if wrong == code {
+		wrong = "999999"
+	}
+	if _, err := uc.VerifyEmail(context.Background(), "user@example.com", wrong); err != apperrors.ErrInvalidInput {
+		t.Fatalf("wrong code: expected ErrInvalidInput, got %v", err)
+	}
+	if usr, _ := users.GetByEmail(context.Background(), "user@example.com"); usr.EmailVerified {
+		t.Fatal("account should not be verified after a wrong code")
+	}
+
+	// The correct code verifies (email match is case-insensitive via
+	// normalization) and logs the user in by issuing tokens.
+	res, err := uc.VerifyEmail(context.Background(), "USER@example.com", code)
+	if err != nil {
+		t.Fatalf("correct code: expected success, got %v", err)
+	}
+	if res.AccessToken == "" || res.RefreshToken == "" {
+		t.Fatal("expected tokens to be issued on successful verification")
+	}
+	usr, _ := users.GetByEmail(context.Background(), "user@example.com")
+	if !usr.EmailVerified {
+		t.Fatal("account should be verified after the correct code")
+	}
+
+	// The code is single-use: replaying it (now consumed) is rejected generically.
+	if _, err := uc.VerifyEmail(context.Background(), "user@example.com", code); err != apperrors.ErrInvalidInput {
+		t.Fatalf("consumed code replay: expected ErrInvalidInput, got %v", err)
+	}
+}
+
+func TestVerifyEmailRejectsAfterMaxAttempts(t *testing.T) {
+	users := newFakeUserRepo(t)
+	mailer := &captureMailer{}
+	uc := NewUsecase(
+		users,
+		&fakeWorkspaceRepo{},
+		jwt.NewService("a", "b", 15*time.Minute, 7*24*time.Hour),
+		mailer,
+		zerolog.Nop(),
+	)
+	if _, err := uc.Register(context.Background(), "user@example.com", "password123", "Jane"); err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+	code := otpPattern.FindString(mailer.lastText)
+	wrong := "111111"
+	if wrong == code {
+		wrong = "222222"
+	}
+
+	// Exhaust the attempt budget with wrong guesses.
+	for i := 0; i < maxOTPAttempts; i++ {
+		if _, err := uc.VerifyEmail(context.Background(), "user@example.com", wrong); err != apperrors.ErrInvalidInput {
+			t.Fatalf("attempt %d: expected ErrInvalidInput, got %v", i, err)
+		}
+	}
+	// Even the correct code is now refused because the code is locked.
+	if _, err := uc.VerifyEmail(context.Background(), "user@example.com", code); err != apperrors.ErrInvalidInput {
+		t.Fatalf("expected lockout after max attempts, got %v", err)
+	}
 }
 
 type fakeUserRepo struct {
@@ -143,6 +234,7 @@ type fakeUserRepo struct {
 	byID          map[uuid.UUID]*domainuser.User
 	byEmail       map[string]*domainuser.User
 	refreshByHash map[string]*domainuser.RefreshToken
+	verifications map[uuid.UUID]*domainuser.EmailVerificationCode
 }
 
 func newFakeUserRepo(t *testing.T) *fakeUserRepo {
@@ -162,11 +254,12 @@ func (r *fakeUserRepo) seedUser(email, password, fullName string) *domainuser.Us
 		r.t.Fatalf("hash password: %v", err)
 	}
 	usr := &domainuser.User{
-		ID:           uuid.New(),
-		Email:        email,
-		PasswordHash: passwordHash,
-		FullName:     fullName,
-		CreatedAt:    time.Now(),
+		ID:            uuid.New(),
+		Email:         email,
+		PasswordHash:  passwordHash,
+		FullName:      fullName,
+		EmailVerified: true, // seeded users represent established, verified accounts
+		CreatedAt:     time.Now(),
 	}
 	r.byID[usr.ID] = usr
 	r.byEmail[email] = usr
@@ -230,6 +323,55 @@ func (r *fakeUserRepo) RevokeRefreshToken(_ context.Context, tokenHash string) e
 		return apperrors.ErrNotFound
 	}
 	rt.IsRevoked = true
+	return nil
+}
+
+func (r *fakeUserRepo) CreateEmailVerificationCode(_ context.Context, userID uuid.UUID, codeHash string, expiresAt time.Time) (*domainuser.EmailVerificationCode, error) {
+	if r.verifications == nil {
+		r.verifications = make(map[uuid.UUID]*domainuser.EmailVerificationCode)
+	}
+	vc := &domainuser.EmailVerificationCode{ID: uuid.New(), UserID: userID, CodeHash: codeHash, ExpiresAt: expiresAt}
+	r.verifications[userID] = vc
+	return vc, nil
+}
+
+func (r *fakeUserRepo) GetLatestEmailVerificationCode(_ context.Context, userID uuid.UUID) (*domainuser.EmailVerificationCode, error) {
+	vc := r.verifications[userID]
+	if vc == nil || vc.Consumed {
+		return nil, apperrors.ErrNotFound
+	}
+	return vc, nil
+}
+
+func (r *fakeUserRepo) IncrementEmailVerificationAttempts(_ context.Context, id uuid.UUID) error {
+	for _, vc := range r.verifications {
+		if vc.ID == id {
+			vc.Attempts++
+		}
+	}
+	return nil
+}
+
+func (r *fakeUserRepo) ConsumeEmailVerificationCode(_ context.Context, id uuid.UUID) error {
+	for _, vc := range r.verifications {
+		if vc.ID == id {
+			vc.Consumed = true
+		}
+	}
+	return nil
+}
+
+func (r *fakeUserRepo) InvalidateEmailVerificationCodes(_ context.Context, userID uuid.UUID) error {
+	if vc := r.verifications[userID]; vc != nil {
+		vc.Consumed = true
+	}
+	return nil
+}
+
+func (r *fakeUserRepo) MarkEmailVerified(_ context.Context, userID uuid.UUID) error {
+	if usr := r.byID[userID]; usr != nil {
+		usr.EmailVerified = true
+	}
 	return nil
 }
 

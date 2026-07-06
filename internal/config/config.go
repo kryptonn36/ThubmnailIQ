@@ -78,6 +78,19 @@ type Config struct {
 		APIKey string `mapstructure:"api_key"`
 	} `mapstructure:"youtube"`
 
+	// SMTP delivers transactional email (e.g. email-verification codes). Leave
+	// host/from empty to run without email in local dev — codes are still
+	// generated, just not sent. For Gmail use host smtp.gmail.com, port 587,
+	// and a 16-char App Password (not your normal password).
+	SMTP struct {
+		Host     string `mapstructure:"host"`
+		Port     int    `mapstructure:"port"`
+		Username string `mapstructure:"username"`
+		Password string `mapstructure:"password"`
+		From     string `mapstructure:"from"`
+		FromName string `mapstructure:"from_name"`
+	} `mapstructure:"smtp"`
+
 	Payment struct {
 		Provider string `mapstructure:"provider"`
 		Currency string `mapstructure:"currency"`
@@ -141,6 +154,8 @@ func Load() (*Config, error) {
 	v.SetDefault("s3.public_read", true)
 	v.SetDefault("cdn.domain", "http://localhost:9000/thumbnailiq-uploads")
 	v.SetDefault("cors.allowed_origins", "http://localhost:3000")
+	v.SetDefault("smtp.port", 587)
+	v.SetDefault("smtp.from_name", "ThumbnailIQ")
 	v.SetDefault("cv_service.url", "http://localhost:8001")
 	v.BindEnv("gemini.api_key", "GEMINI_API_KEY")
 	v.SetDefault("gemini.model", "gemini-2.0-flash")

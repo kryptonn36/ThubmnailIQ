@@ -7,9 +7,11 @@ export const API_BASE_URL =
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  code?: string;
+  constructor(message: string, status: number, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
     this.name = "ApiError";
   }
 }
@@ -104,15 +106,17 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   if (!res.ok) {
     let message = `Request failed with status ${res.status}`;
+    let code: string | undefined;
     try {
       const data = await res.json();
       if (data?.message) message = data.message;
       else if (data?.error) message = data.error;
+      if (data?.code) code = data.code;
     } catch {
       // ignore parse failures, use default message
     }
-    logger.error("api request failed", { path, method, status: res.status, message });
-    throw new ApiError(message, res.status);
+    logger.error("api request failed", { path, method, status: res.status, message, code });
+    throw new ApiError(message, res.status, code);
   }
 
   if (res.status === 204) {
