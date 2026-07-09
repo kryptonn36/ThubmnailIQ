@@ -174,6 +174,100 @@ func (u *Usecase) ResendVerification(ctx context.Context, email string) error {
 	return nil
 }
 
+// RequestPasswordReset emails a reset OTP to the account, if it exists. Like
+// ResendVerification, it always reports success so it can't be used to discover
+// which emails are registered.
+func (u *Usecase) RequestPasswordReset(ctx context.Context, email string) error {
+	email = validator.NormalizeEmail(email)
+	usr, err := u.users.GetByEmail(ctx, email)
+	if err != nil {
+		return nil
+	}
+
+	code, err := hash.GenerateNumericOTP(otpLength)
+	if err != nil {
+		u.log.Error().Err(err).Str("user_id", usr.ID.String()).Msg("generating password reset code")
+		return nil
+	}
+	if err := u.users.InvalidatePasswordResetCodes(ctx, usr.ID); err != nil {
+		u.log.Error().Err(err).Str("user_id", usr.ID.String()).Msg("invalidating old password reset codes")
+		return nil
+	}
+	if _, err := u.users.CreatePasswordResetCode(ctx, usr.ID, hash.SHA256Hex(code), time.Now().Add(otpTTL)); err != nil {
+		u.log.Error().Err(err).Str("user_id", usr.ID.String()).Msg("storing password reset code")
+		return nil
+	}
+
+	if u.mailer == nil {
+		u.log.Warn().Str("user_id", usr.ID.String()).Msg("no mailer configured; password reset code generated but not emailed")
+		return nil
+	}
+	minutes := int(otpTTL.Minutes())
+	subject := "Your ThumbnailIQ password reset code"
+	text := fmt.Sprintf("Hi %s,\n\nYour ThumbnailIQ password reset code is: %s\n\nIt expires in %d minutes. If you didn't request a password reset, you can safely ignore this email — your password won't change.",
+		usr.FullName, code, minutes)
+	html := fmt.Sprintf(`<p>Hi %s,</p><p>Your ThumbnailIQ password reset code is:</p>`+
+		`<p style="font-size:28px;font-weight:bold;letter-spacing:4px">%s</p>`+
+		`<p>It expires in %d minutes. If you didn't request a password reset, you can safely ignore this email — your password won't change.</p>`,
+		usr.FullName, code, minutes)
+	if err := u.mailer.Send(ctx, usr.Email, subject, text, html); err != nil {
+		u.log.Error().Err(err).Str("user_id", usr.ID.String()).Msg("sending password reset code")
+	}
+	return nil
+}
+
+// ResetPassword validates a reset OTP and, on success, sets the new password,
+// consumes the code, and revokes every existing session so a compromised old
+// password (or stolen refresh token) can't keep access. It also marks the email
+// verified, since a valid code proves ownership of the address. Errors are
+// uniform (ErrInvalidInput) to avoid leaking whether the email/code exists.
+func (u *Usecase) ResetPassword(ctx context.Context, email, code, newPassword string) error {
+	email = validator.NormalizeEmail(email)
+	if !validator.IsValidPassword(newPassword) {
+		return errors.ErrInvalidInput
+	}
+	usr, err := u.users.GetByEmail(ctx, email)
+	if err != nil {
+		return errors.ErrInvalidInput
+	}
+
+	rc, err := u.users.GetLatestPasswordResetCode(ctx, usr.ID)
+	if err != nil {
+		return errors.ErrInvalidInput
+	}
+	if time.Now().After(rc.ExpiresAt) || rc.Attempts >= maxOTPAttempts {
+		return errors.ErrInvalidInput
+	}
+	if hash.SHA256Hex(code) != rc.CodeHash {
+		if incErr := u.users.IncrementPasswordResetAttempts(ctx, rc.ID); incErr != nil {
+			u.log.Error().Err(incErr).Msg("incrementing password reset attempts")
+		}
+		return errors.ErrInvalidInput
+	}
+
+	newHash, err := hash.HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+	if err := u.users.UpdatePassword(ctx, usr.ID, newHash); err != nil {
+		return err
+	}
+	if err := u.users.ConsumePasswordResetCode(ctx, rc.ID); err != nil {
+		return err
+	}
+	// A valid reset code proves email ownership, so clear any unverified flag.
+	if !usr.EmailVerified {
+		if err := u.users.MarkEmailVerified(ctx, usr.ID); err != nil {
+			u.log.Error().Err(err).Str("user_id", usr.ID.String()).Msg("marking email verified during password reset")
+		}
+	}
+	// Invalidate all existing sessions after a password change.
+	if err := u.users.RevokeAllRefreshTokens(ctx, usr.ID); err != nil {
+		u.log.Error().Err(err).Str("user_id", usr.ID.String()).Msg("revoking sessions after password reset")
+	}
+	return nil
+}
+
 func (u *Usecase) Login(ctx context.Context, email, password string) (*AuthResult, error) {
 	email = validator.NormalizeEmail(email)
 	usr, err := u.users.GetByEmail(ctx, email)

@@ -153,11 +153,34 @@ func (q *Queries) MarkUserEmailVerified(ctx context.Context, id uuid.UUID) error
 	return err
 }
 
+const revokeAllRefreshTokensForUser = `-- name: RevokeAllRefreshTokensForUser :exec
+UPDATE refresh_tokens SET is_revoked = TRUE WHERE user_id = $1 AND is_revoked = FALSE
+`
+
+func (q *Queries) RevokeAllRefreshTokensForUser(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, revokeAllRefreshTokensForUser, userID)
+	return err
+}
+
 const revokeRefreshToken = `-- name: RevokeRefreshToken :exec
 UPDATE refresh_tokens SET is_revoked = TRUE WHERE token_hash = $1
 `
 
 func (q *Queries) RevokeRefreshToken(ctx context.Context, tokenHash string) error {
 	_, err := q.db.Exec(ctx, revokeRefreshToken, tokenHash)
+	return err
+}
+
+const updateUserPassword = `-- name: UpdateUserPassword :exec
+UPDATE users SET password_hash = $2, updated_at = NOW() WHERE id = $1
+`
+
+type UpdateUserPasswordParams struct {
+	ID           uuid.UUID   `json:"id"`
+	PasswordHash pgtype.Text `json:"password_hash"`
+}
+
+func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error {
+	_, err := q.db.Exec(ctx, updateUserPassword, arg.ID, arg.PasswordHash)
 	return err
 }

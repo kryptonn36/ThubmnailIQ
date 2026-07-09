@@ -157,3 +157,60 @@ func (r *UserRepo) InvalidateEmailVerificationCodes(ctx context.Context, userID 
 func (r *UserRepo) MarkEmailVerified(ctx context.Context, userID uuid.UUID) error {
 	return r.q.MarkUserEmailVerified(ctx, userID)
 }
+
+func toDomainPasswordResetCode(c db.PasswordResetCode) *user.PasswordResetCode {
+	return &user.PasswordResetCode{
+		ID:        c.ID,
+		UserID:    c.UserID,
+		CodeHash:  c.CodeHash,
+		Attempts:  int(c.Attempts),
+		ExpiresAt: tsVal(c.ExpiresAt),
+		Consumed:  c.ConsumedAt.Valid,
+	}
+}
+
+func (r *UserRepo) CreatePasswordResetCode(ctx context.Context, userID uuid.UUID, codeHash string, expiresAt time.Time) (*user.PasswordResetCode, error) {
+	c, err := r.q.CreatePasswordResetCode(ctx, db.CreatePasswordResetCodeParams{
+		UserID:    userID,
+		CodeHash:  codeHash,
+		ExpiresAt: tsNow(expiresAt),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return toDomainPasswordResetCode(c), nil
+}
+
+func (r *UserRepo) GetLatestPasswordResetCode(ctx context.Context, userID uuid.UUID) (*user.PasswordResetCode, error) {
+	c, err := r.q.GetLatestPasswordResetCode(ctx, userID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, apperrors.ErrNotFound
+		}
+		return nil, err
+	}
+	return toDomainPasswordResetCode(c), nil
+}
+
+func (r *UserRepo) IncrementPasswordResetAttempts(ctx context.Context, id uuid.UUID) error {
+	return r.q.IncrementPasswordResetAttempts(ctx, id)
+}
+
+func (r *UserRepo) ConsumePasswordResetCode(ctx context.Context, id uuid.UUID) error {
+	return r.q.ConsumePasswordResetCode(ctx, id)
+}
+
+func (r *UserRepo) InvalidatePasswordResetCodes(ctx context.Context, userID uuid.UUID) error {
+	return r.q.InvalidatePasswordResetCodes(ctx, userID)
+}
+
+func (r *UserRepo) UpdatePassword(ctx context.Context, userID uuid.UUID, passwordHash string) error {
+	return r.q.UpdateUserPassword(ctx, db.UpdateUserPasswordParams{
+		ID:           userID,
+		PasswordHash: textOrNil(passwordHash),
+	})
+}
+
+func (r *UserRepo) RevokeAllRefreshTokens(ctx context.Context, userID uuid.UUID) error {
+	return r.q.RevokeAllRefreshTokensForUser(ctx, userID)
+}

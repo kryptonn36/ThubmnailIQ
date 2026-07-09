@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
@@ -20,7 +20,15 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Surface a confirmation when arriving here right after a password reset.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("reset") === "1") {
+      setNotice("Your password was reset. Please log in with your new password.");
+    }
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -57,6 +65,7 @@ export default function LoginPage() {
         </div>
 
         <Card as="form" onSubmit={handleSubmit} className="space-y-4">
+          {notice && <Alert variant="success">{notice}</Alert>}
           {error && <Alert variant="danger">{error}</Alert>}
           <div>
             <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-gray-300">
@@ -73,9 +82,17 @@ export default function LoginPage() {
             />
           </div>
           <div>
-            <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-gray-300">
-              Password
-            </label>
+            <div className="mb-1.5 flex items-center justify-between">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-300">
+                Password
+              </label>
+              <Link
+                href="/forgot-password"
+                className="text-xs font-medium text-brand-300 transition-colors hover:text-brand-200"
+              >
+                Forgot password?
+              </Link>
+            </div>
             <Input
               id="password"
               type="password"

@@ -45,6 +45,17 @@ type EmailVerificationCode struct {
 	Consumed  bool
 }
 
+// PasswordResetCode is a short-lived OTP emailed to a user who requested a
+// password reset. Same storage posture as EmailVerificationCode.
+type PasswordResetCode struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	CodeHash  string
+	Attempts  int
+	ExpiresAt time.Time
+	Consumed  bool
+}
+
 type Repository interface {
 	Create(ctx context.Context, email, passwordHash, fullName string) (*User, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*User, error)
@@ -59,4 +70,12 @@ type Repository interface {
 	ConsumeEmailVerificationCode(ctx context.Context, id uuid.UUID) error
 	InvalidateEmailVerificationCodes(ctx context.Context, userID uuid.UUID) error
 	MarkEmailVerified(ctx context.Context, userID uuid.UUID) error
+
+	CreatePasswordResetCode(ctx context.Context, userID uuid.UUID, codeHash string, expiresAt time.Time) (*PasswordResetCode, error)
+	GetLatestPasswordResetCode(ctx context.Context, userID uuid.UUID) (*PasswordResetCode, error)
+	IncrementPasswordResetAttempts(ctx context.Context, id uuid.UUID) error
+	ConsumePasswordResetCode(ctx context.Context, id uuid.UUID) error
+	InvalidatePasswordResetCodes(ctx context.Context, userID uuid.UUID) error
+	UpdatePassword(ctx context.Context, userID uuid.UUID, passwordHash string) error
+	RevokeAllRefreshTokens(ctx context.Context, userID uuid.UUID) error
 }

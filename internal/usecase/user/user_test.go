@@ -229,12 +229,73 @@ func TestVerifyEmailRejectsAfterMaxAttempts(t *testing.T) {
 	}
 }
 
+func TestPasswordResetFlow(t *testing.T) {
+	users := newFakeUserRepo(t)
+	mailer := &captureMailer{}
+	uc := NewUsecase(
+		users,
+		&fakeWorkspaceRepo{},
+		jwt.NewService("a", "b", 15*time.Minute, 7*24*time.Hour),
+		mailer,
+		zerolog.Nop(),
+	)
+	// An established, verified user with an active session.
+	usr := users.seedUser("user@example.com", "oldpassword1", "Jane")
+	users.refreshByHash["existing"] = &domainuser.RefreshToken{UserID: usr.ID, TokenHash: "existing"}
+
+	if err := uc.RequestPasswordReset(context.Background(), "  USER@Example.com "); err != nil {
+		t.Fatalf("RequestPasswordReset returned error: %v", err)
+	}
+	if mailer.calls != 1 {
+		t.Fatalf("expected one reset email, got %d", mailer.calls)
+	}
+	code := otpPattern.FindString(mailer.lastText)
+	if code == "" {
+		t.Fatalf("no code in reset email: %q", mailer.lastText)
+	}
+
+	// Wrong code is rejected and doesn't change the password.
+	wrong := "000000"
+	if wrong == code {
+		wrong = "999999"
+	}
+	if err := uc.ResetPassword(context.Background(), "user@example.com", wrong, "newpassword1"); err != apperrors.ErrInvalidInput {
+		t.Fatalf("wrong code: expected ErrInvalidInput, got %v", err)
+	}
+
+	// A too-short password is rejected before any code check.
+	if err := uc.ResetPassword(context.Background(), "user@example.com", code, "short"); err != apperrors.ErrInvalidInput {
+		t.Fatalf("weak password: expected ErrInvalidInput, got %v", err)
+	}
+
+	// Correct code + valid password succeeds.
+	if err := uc.ResetPassword(context.Background(), "user@example.com", code, "newpassword1"); err != nil {
+		t.Fatalf("reset: expected success, got %v", err)
+	}
+	// New password now works; old one doesn't.
+	if _, err := uc.Login(context.Background(), "user@example.com", "newpassword1"); err != nil {
+		t.Fatalf("login with new password failed: %v", err)
+	}
+	if _, err := uc.Login(context.Background(), "user@example.com", "oldpassword1"); err != apperrors.ErrUnauthorized {
+		t.Fatalf("old password should be rejected, got %v", err)
+	}
+	// Existing sessions were revoked.
+	if !users.refreshByHash["existing"].IsRevoked {
+		t.Fatal("expected existing refresh tokens to be revoked after reset")
+	}
+	// The consumed code can't be reused.
+	if err := uc.ResetPassword(context.Background(), "user@example.com", code, "another1234"); err != apperrors.ErrInvalidInput {
+		t.Fatalf("consumed code replay: expected ErrInvalidInput, got %v", err)
+	}
+}
+
 type fakeUserRepo struct {
 	t             *testing.T
 	byID          map[uuid.UUID]*domainuser.User
 	byEmail       map[string]*domainuser.User
 	refreshByHash map[string]*domainuser.RefreshToken
 	verifications map[uuid.UUID]*domainuser.EmailVerificationCode
+	resets        map[uuid.UUID]*domainuser.PasswordResetCode
 }
 
 func newFakeUserRepo(t *testing.T) *fakeUserRepo {
@@ -371,6 +432,64 @@ func (r *fakeUserRepo) InvalidateEmailVerificationCodes(_ context.Context, userI
 func (r *fakeUserRepo) MarkEmailVerified(_ context.Context, userID uuid.UUID) error {
 	if usr := r.byID[userID]; usr != nil {
 		usr.EmailVerified = true
+	}
+	return nil
+}
+
+func (r *fakeUserRepo) CreatePasswordResetCode(_ context.Context, userID uuid.UUID, codeHash string, expiresAt time.Time) (*domainuser.PasswordResetCode, error) {
+	if r.resets == nil {
+		r.resets = make(map[uuid.UUID]*domainuser.PasswordResetCode)
+	}
+	rc := &domainuser.PasswordResetCode{ID: uuid.New(), UserID: userID, CodeHash: codeHash, ExpiresAt: expiresAt}
+	r.resets[userID] = rc
+	return rc, nil
+}
+
+func (r *fakeUserRepo) GetLatestPasswordResetCode(_ context.Context, userID uuid.UUID) (*domainuser.PasswordResetCode, error) {
+	rc := r.resets[userID]
+	if rc == nil || rc.Consumed {
+		return nil, apperrors.ErrNotFound
+	}
+	return rc, nil
+}
+
+func (r *fakeUserRepo) IncrementPasswordResetAttempts(_ context.Context, id uuid.UUID) error {
+	for _, rc := range r.resets {
+		if rc.ID == id {
+			rc.Attempts++
+		}
+	}
+	return nil
+}
+
+func (r *fakeUserRepo) ConsumePasswordResetCode(_ context.Context, id uuid.UUID) error {
+	for _, rc := range r.resets {
+		if rc.ID == id {
+			rc.Consumed = true
+		}
+	}
+	return nil
+}
+
+func (r *fakeUserRepo) InvalidatePasswordResetCodes(_ context.Context, userID uuid.UUID) error {
+	if rc := r.resets[userID]; rc != nil {
+		rc.Consumed = true
+	}
+	return nil
+}
+
+func (r *fakeUserRepo) UpdatePassword(_ context.Context, userID uuid.UUID, passwordHash string) error {
+	if usr := r.byID[userID]; usr != nil {
+		usr.PasswordHash = passwordHash
+	}
+	return nil
+}
+
+func (r *fakeUserRepo) RevokeAllRefreshTokens(_ context.Context, userID uuid.UUID) error {
+	for _, rt := range r.refreshByHash {
+		if rt.UserID == userID {
+			rt.IsRevoked = true
+		}
 	}
 	return nil
 }

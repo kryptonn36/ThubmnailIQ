@@ -197,3 +197,21 @@ func (r *fakeUserRepo) ConsumeEmailVerificationCode(context.Context, uuid.UUID) 
 func (r *fakeUserRepo) InvalidateEmailVerificationCodes(context.Context, uuid.UUID) error { return nil }
 
 func (r *fakeUserRepo) MarkEmailVerified(context.Context, uuid.UUID) error { return nil }
+
+func (r *fakeUserRepo) CreatePasswordResetCode(context.Context, uuid.UUID, string, time.Time) (*domainuser.PasswordResetCode, error) {
+	return nil, nil
+}
+
+func (r *fakeUserRepo) GetLatestPasswordResetCode(context.Context, uuid.UUID) (*domainuser.PasswordResetCode, error) {
+	return nil, apperrors.ErrNotFound
+}
+
+func (r *fakeUserRepo) IncrementPasswordResetAttempts(context.Context, uuid.UUID) error { return nil }
+
+func (r *fakeUserRepo) ConsumePasswordResetCode(context.Context, uuid.UUID) error { return nil }
+
+func (r *fakeUserRepo) InvalidatePasswordResetCodes(context.Context, uuid.UUID) error { return nil }
+
+func (r *fakeUserRepo) UpdatePassword(context.Context, uuid.UUID, string) error { return nil }
+
+func (r *fakeUserRepo) RevokeAllRefreshTokens(context.Context, uuid.UUID) error { return nil }

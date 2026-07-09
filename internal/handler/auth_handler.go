@@ -132,3 +132,43 @@ func (h *AuthHandler) ResendVerification(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "if the account exists and is unverified, a code has been sent"})
 }
+
+type forgotPasswordRequest struct {
+	Email string `json:"email" binding:"required"`
+}
+
+// ForgotPassword emails a password-reset OTP. Always 200 (no account
+// enumeration), whether or not the email is registered.
+func (h *AuthHandler) ForgotPassword(c *gin.Context) {
+	var req forgotPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.uc.RequestPasswordReset(c.Request.Context(), req.Email); err != nil {
+		respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "if the account exists, a reset code has been sent"})
+}
+
+type resetPasswordRequest struct {
+	Email       string `json:"email" binding:"required"`
+	Code        string `json:"code" binding:"required"`
+	NewPassword string `json:"new_password" binding:"required"`
+}
+
+// ResetPassword validates the OTP and sets a new password. On success the user
+// is logged out everywhere and must sign in again with the new password.
+func (h *AuthHandler) ResetPassword(c *gin.Context) {
+	var req resetPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.uc.ResetPassword(c.Request.Context(), req.Email, req.Code, req.NewPassword); err != nil {
+		respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "password updated; please log in with your new password"})
+}

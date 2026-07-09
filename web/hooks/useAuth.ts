@@ -14,6 +14,8 @@ interface UseAuthResult {
   register: (email: string, password: string, fullName: string) => Promise<{ email: string }>;
   verifyEmail: (email: string, code: string) => Promise<void>;
   resendVerification: (email: string) => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<void>;
+  resetPassword: (email: string, code: string, newPassword: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -78,6 +80,17 @@ export function useAuth(): UseAuthResult {
     await api.post("/auth/resend-verification", { email }, false);
   }, []);
 
+  const requestPasswordReset = useCallback(async (email: string) => {
+    await api.post("/auth/forgot-password", { email }, false);
+  }, []);
+
+  const resetPassword = useCallback(
+    async (email: string, code: string, newPassword: string) => {
+      await api.post("/auth/reset-password", { email, code, new_password: newPassword }, false);
+    },
+    []
+  );
+
   const logout = useCallback(() => {
     clearAuth();
     setUser(null);
@@ -85,5 +98,16 @@ export function useAuth(): UseAuthResult {
     router.push("/login");
   }, [router]);
 
-  return { user, loading, authenticated, login, register, verifyEmail, resendVerification, logout };
+  return {
+    user,
+    loading,
+    authenticated,
+    login,
+    register,
+    verifyEmail,
+    resendVerification,
+    requestPasswordReset,
+    resetPassword,
+    logout,
+  };
 }
