@@ -21,16 +21,25 @@ export interface RegisterResponse {
   email: string;
 }
 
+export type WorkspaceRole = "owner" | "admin" | "editor" | "viewer";
+
+// GET /workspaces returns each workspace enriched with whose it is
+// (owner_name/owner_email) and what the current user may do in it (role).
 export interface Workspace {
   id: string;
   name: string;
   slug: string;
   plan: string;
+  owner_id: string;
   analyses_this_month: number;
   analyses_limit: number;
   brand_primary_color: string;
   brand_secondary_color: string;
   brand_font: string;
+  owner_name: string;
+  owner_email: string;
+  role: WorkspaceRole;
+  member_count: number;
 }
 
 export type AnalysisStatus = "pending" | "processing" | "complete" | "failed";

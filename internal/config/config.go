@@ -78,10 +78,21 @@ type Config struct {
 		APIKey string `mapstructure:"api_key"`
 	} `mapstructure:"youtube"`
 
-	// SMTP delivers transactional email (e.g. email-verification codes). Leave
-	// host/from empty to run without email in local dev — codes are still
-	// generated, just not sent. For Gmail use host smtp.gmail.com, port 587,
-	// and a 16-char App Password (not your normal password).
+	// MailerSend delivers transactional email through MailerSend's HTTP API
+	// and is preferred over SMTP below when its api_key + from are set.
+	// APIKey is an API token from the MailerSend dashboard; From must be an
+	// address on a domain added and verified there.
+	MailerSend struct {
+		APIKey   string `mapstructure:"api_key"`
+		From     string `mapstructure:"from"`
+		FromName string `mapstructure:"from_name"`
+	} `mapstructure:"mailersend"`
+
+	// SMTP delivers transactional email (e.g. email-verification codes) when
+	// MailerSend above isn't configured. Leave host/from empty to run without
+	// email in local dev — codes are still generated, just not sent. For Gmail
+	// use host smtp.gmail.com, port 587, and a 16-char App Password (not your
+	// normal password).
 	SMTP struct {
 		Host     string `mapstructure:"host"`
 		Port     int    `mapstructure:"port"`
@@ -154,6 +165,9 @@ func Load() (*Config, error) {
 	v.SetDefault("s3.public_read", true)
 	v.SetDefault("cdn.domain", "http://localhost:9000/thumbnailiq-uploads")
 	v.SetDefault("cors.allowed_origins", "http://localhost:3000")
+	v.BindEnv("mailersend.api_key", "MAILERSEND_API_KEY")
+	v.BindEnv("mailersend.from", "MAILERSEND_FROM")
+	v.SetDefault("mailersend.from_name", "ThumbnailIQ")
 	v.SetDefault("smtp.port", 587)
 	v.SetDefault("smtp.from_name", "ThumbnailIQ")
 	v.SetDefault("cv_service.url", "http://localhost:8001")

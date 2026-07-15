@@ -1,5 +1,6 @@
 import { clearAuth, getAccessToken, getRefreshToken, storeAuth } from "@/lib/auth";
 import { logger } from "@/lib/logger";
+import { getActiveWorkspaceId } from "@/lib/workspace";
 import type { AuthResponse } from "@/types";
 
 export const API_BASE_URL =
@@ -73,6 +74,13 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     const token = getAccessToken();
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
+    }
+    // Scope the request to the workspace selected in the switcher. The server
+    // only uses this when no explicit workspace_id is supplied, and always
+    // verifies membership before acting on it.
+    const workspaceId = getActiveWorkspaceId();
+    if (workspaceId) {
+      headers["X-Workspace-ID"] = workspaceId;
     }
   }
 

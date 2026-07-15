@@ -97,10 +97,12 @@ type Querier interface {
 	ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) ([]ListUsersAdminRow, error)
 	ListWorkspaceMembers(ctx context.Context, workspaceID uuid.UUID) ([]ListWorkspaceMembersRow, error)
 	ListWorkspacesForUser(ctx context.Context, userID uuid.UUID) ([]Workspace, error)
+	ListWorkspacesForUserWithContext(ctx context.Context, userID uuid.UUID) ([]ListWorkspacesForUserWithContextRow, error)
 	MarkTrackingJobChecked(ctx context.Context, id uuid.UUID) error
 	MarkUserEmailVerified(ctx context.Context, id uuid.UUID) error
 	MonthlySignupTrend(ctx context.Context) ([]MonthlySignupTrendRow, error)
 	NextThumbnailVersionNumber(ctx context.Context, analysisID uuid.UUID) (int32, error)
+	RemoveWorkspaceMember(ctx context.Context, arg RemoveWorkspaceMemberParams) (int64, error)
 	ResetUserPasswordAdmin(ctx context.Context, arg ResetUserPasswordAdminParams) error
 	RestoreUploadAdmin(ctx context.Context, id uuid.UUID) error
 	RevokeAdminRefreshToken(ctx context.Context, tokenHash string) error
@@ -121,6 +123,7 @@ type Querier interface {
 	UpdateAppSettings(ctx context.Context, arg UpdateAppSettingsParams) (AppSetting, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 	UpdateWorkspaceBrand(ctx context.Context, arg UpdateWorkspaceBrandParams) (Workspace, error)
+	UpdateWorkspaceName(ctx context.Context, arg UpdateWorkspaceNameParams) (Workspace, error)
 	UpdateWorkspacePlan(ctx context.Context, arg UpdateWorkspacePlanParams) (Workspace, error)
 	UpsertSubscription(ctx context.Context, arg UpsertSubscriptionParams) (Subscription, error)
 	UpsertViralThumbnail(ctx context.Context, arg UpsertViralThumbnailParams) (ViralThumbnail, error)

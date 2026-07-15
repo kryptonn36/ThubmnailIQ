@@ -22,7 +22,7 @@ func CORS(allowedOrigins []string) gin.HandlerFunc {
 			c.Header("Access-Control-Allow-Origin", origin)
 			c.Header("Vary", "Origin")
 			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-			c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-API-Key")
+			c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-API-Key, X-Workspace-ID")
 		}
 		if c.Request.Method == http.MethodOptions {
 			// Only short-circuit as a successful preflight for allowed origins;

@@ -12,6 +12,27 @@ JOIN workspace_members wm ON wm.workspace_id = w.id
 WHERE wm.user_id = $1 AND w.deleted_at IS NULL
 ORDER BY w.created_at DESC;
 
+-- name: ListWorkspacesForUserWithContext :many
+SELECT w.*,
+       o.full_name AS owner_name,
+       o.email AS owner_email,
+       wm.role AS member_role,
+       (SELECT COUNT(*) FROM workspace_members mc WHERE mc.workspace_id = w.id) AS member_count
+FROM workspaces w
+JOIN workspace_members wm ON wm.workspace_id = w.id
+JOIN users o ON o.id = w.owner_id
+WHERE wm.user_id = $1 AND w.deleted_at IS NULL
+ORDER BY w.created_at DESC;
+
+-- name: UpdateWorkspaceName :one
+UPDATE workspaces SET name = $2, updated_at = NOW()
+WHERE id = $1 AND deleted_at IS NULL
+RETURNING *;
+
+-- name: RemoveWorkspaceMember :execrows
+DELETE FROM workspace_members
+WHERE workspace_id = $1 AND user_id = $2;
+
 -- name: AddWorkspaceMember :one
 INSERT INTO workspace_members (workspace_id, user_id, role)
 VALUES ($1, $2, $3)

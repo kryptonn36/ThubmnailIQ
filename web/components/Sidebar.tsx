@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useMotionVariants } from "@/lib/motion";
+import WorkspaceSwitcher from "@/components/WorkspaceSwitcher";
 
 interface NavItem {
   href: string;
@@ -142,6 +143,7 @@ export default function Sidebar() {
       className="hidden w-60 shrink-0 border-r border-surface-300 bg-surface-50 px-4 py-6 lg:block"
     >
       <SidebarLogo />
+      <WorkspaceSwitcher />
       <SidebarNav pathname={pathname} />
     </motion.aside>
   );
@@ -175,6 +177,7 @@ export function MobileSidebar({ open, onClose }: { open: boolean; onClose: () =>
         aria-label="Navigation menu"
       >
         <SidebarLogo />
+        <WorkspaceSwitcher />
         <SidebarNav pathname={pathname} onNavigate={onClose} />
       </motion.aside>
     </motion.div>

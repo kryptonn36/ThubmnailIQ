@@ -94,9 +94,11 @@ func NewRouter(h *Handlers, jwtSvc, adminJWTSvc *jwt.Service, billingRepo billin
 
 	authed.POST("/workspaces", h.Workspace.Create)
 	authed.GET("/workspaces", h.Workspace.List)
+	authed.PATCH("/workspaces/:id", h.Workspace.Rename)
 	authed.PATCH("/workspaces/:id/brand", h.Workspace.UpdateBrand)
 	authed.GET("/workspaces/:id/members", h.Workspace.ListMembers)
 	authed.POST("/workspaces/:id/members", h.Workspace.InviteMember)
+	authed.DELETE("/workspaces/:id/members/:userId", h.Workspace.RemoveMember)
 
 	authed.POST("/analyses", h.Analysis.Create)
 	authed.GET("/analyses", h.Analysis.List)

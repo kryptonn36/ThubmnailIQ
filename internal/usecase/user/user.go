@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"fmt"
+	"html"
 	"strings"
 	"time"
 
@@ -156,7 +157,7 @@ func (u *Usecase) VerifyEmail(ctx context.Context, email, code string) (*AuthRes
 		return nil, err
 	}
 	usr.EmailVerified = true
-	return u.issueTokens(ctx, usr)
+	return u.issueTokens(ctx, usr, "")
 }
 
 // ResendVerification issues a new code for an unverified account. It never
@@ -268,7 +269,16 @@ func (u *Usecase) ResetPassword(ctx context.Context, email, code, newPassword st
 	return nil
 }
 
-func (u *Usecase) Login(ctx context.Context, email, password string) (*AuthResult, error) {
+// LoginDevice describes where a login request came from. It feeds the
+// security-alert email and the refresh token's device info; both fields are
+// client-supplied (IP via proxy headers, UserAgent verbatim) so they are
+// informational, never trusted for auth decisions.
+type LoginDevice struct {
+	IP        string
+	UserAgent string
+}
+
+func (u *Usecase) Login(ctx context.Context, email, password string, device LoginDevice) (*AuthResult, error) {
 	email = validator.NormalizeEmail(email)
 	usr, err := u.users.GetByEmail(ctx, email)
 	if err != nil {
@@ -286,7 +296,51 @@ func (u *Usecase) Login(ctx context.Context, email, password string) (*AuthResul
 	if !usr.EmailVerified {
 		return nil, errors.ErrEmailNotVerified
 	}
-	return u.issueTokens(ctx, usr)
+	res, err := u.issueTokens(ctx, usr, device.UserAgent)
+	if err != nil {
+		return nil, err
+	}
+	// Security notification only — the login itself already succeeded, so this
+	// must never block or fail the request.
+	u.sendLoginAlert(usr, device)
+	return res, nil
+}
+
+// sendLoginAlert emails a "new sign-in to your account" security notice after
+// every successful password login, in the background so mail latency/outages
+// never affect the login response. If this account wasn't you, the email tells
+// the user to reset their password (which revokes all sessions).
+func (u *Usecase) sendLoginAlert(usr *user.User, device LoginDevice) {
+	if u.mailer == nil {
+		return
+	}
+	when := time.Now().UTC().Format("Mon, 02 Jan 2006 15:04 MST")
+	ip := device.IP
+	if ip == "" {
+		ip = "unknown"
+	}
+	ua := device.UserAgent
+	if ua == "" {
+		ua = "unknown device"
+	}
+
+	subject := "New sign-in to your ThumbnailIQ account"
+	text := fmt.Sprintf("Hi %s,\n\nYour ThumbnailIQ account was just signed in to.\n\nTime: %s\nIP address: %s\nDevice: %s\n\nIf this was you, no action is needed. If you don't recognize this sign-in, reset your password immediately — that signs the account out everywhere.",
+		usr.FullName, when, ip, ua)
+	// The user agent and IP come from request headers, so they are escaped
+	// before being embedded in HTML.
+	htmlBody := fmt.Sprintf(`<p>Hi %s,</p><p>Your ThumbnailIQ account was just signed in to.</p>`+
+		`<p><strong>Time:</strong> %s<br><strong>IP address:</strong> %s<br><strong>Device:</strong> %s</p>`+
+		`<p>If this was you, no action is needed. If you don't recognize this sign-in, reset your password immediately — that signs the account out everywhere.</p>`,
+		html.EscapeString(usr.FullName), html.EscapeString(when), html.EscapeString(ip), html.EscapeString(ua))
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := u.mailer.Send(ctx, usr.Email, subject, text, htmlBody); err != nil {
+			u.log.Error().Err(err).Str("user_id", usr.ID.String()).Msg("sending login alert email")
+		}
+	}()
 }
 
 func (u *Usecase) Refresh(ctx context.Context, refreshToken string) (*AuthResult, error) {
@@ -307,10 +361,10 @@ func (u *Usecase) Refresh(ctx context.Context, refreshToken string) (*AuthResult
 		return nil, errors.ErrForbidden
 	}
 	_ = u.users.RevokeRefreshToken(ctx, tokenHash)
-	return u.issueTokens(ctx, usr)
+	return u.issueTokens(ctx, usr, "")
 }
 
-func (u *Usecase) issueTokens(ctx context.Context, usr *user.User) (*AuthResult, error) {
+func (u *Usecase) issueTokens(ctx context.Context, usr *user.User, deviceInfo string) (*AuthResult, error) {
 	access, ttl, err := u.jwt.GenerateAccessToken(usr.ID, usr.Email)
 	if err != nil {
 		return nil, err
@@ -320,7 +374,7 @@ func (u *Usecase) issueTokens(ctx context.Context, usr *user.User) (*AuthResult,
 		return nil, err
 	}
 	expiresAt := time.Now().Add(u.jwt.RefreshTTL())
-	if _, err := u.users.CreateRefreshToken(ctx, usr.ID, hash.SHA256Hex(refreshRaw), "", expiresAt); err != nil {
+	if _, err := u.users.CreateRefreshToken(ctx, usr.ID, hash.SHA256Hex(refreshRaw), deviceInfo, expiresAt); err != nil {
 		return nil, err
 	}
 

@@ -219,6 +219,101 @@ func (q *Queries) ListWorkspacesForUser(ctx context.Context, userID uuid.UUID) (
 	return items, nil
 }
 
+const listWorkspacesForUserWithContext = `-- name: ListWorkspacesForUserWithContext :many
+SELECT w.id, w.name, w.slug, w.logo_url, w.plan, w.owner_id, w.analyses_this_month, w.analyses_limit, w.api_requests_this_month, w.api_requests_limit, w.created_at, w.updated_at, w.deleted_at, w.brand_primary_color, w.brand_secondary_color, w.brand_font,
+       o.full_name AS owner_name,
+       o.email AS owner_email,
+       wm.role AS member_role,
+       (SELECT COUNT(*) FROM workspace_members mc WHERE mc.workspace_id = w.id) AS member_count
+FROM workspaces w
+JOIN workspace_members wm ON wm.workspace_id = w.id
+JOIN users o ON o.id = w.owner_id
+WHERE wm.user_id = $1 AND w.deleted_at IS NULL
+ORDER BY w.created_at DESC
+`
+
+type ListWorkspacesForUserWithContextRow struct {
+	ID                   uuid.UUID          `json:"id"`
+	Name                 string             `json:"name"`
+	Slug                 string             `json:"slug"`
+	LogoUrl              pgtype.Text        `json:"logo_url"`
+	Plan                 string             `json:"plan"`
+	OwnerID              uuid.UUID          `json:"owner_id"`
+	AnalysesThisMonth    int32              `json:"analyses_this_month"`
+	AnalysesLimit        int32              `json:"analyses_limit"`
+	ApiRequestsThisMonth int32              `json:"api_requests_this_month"`
+	ApiRequestsLimit     int32              `json:"api_requests_limit"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
+	BrandPrimaryColor    pgtype.Text        `json:"brand_primary_color"`
+	BrandSecondaryColor  pgtype.Text        `json:"brand_secondary_color"`
+	BrandFont            pgtype.Text        `json:"brand_font"`
+	OwnerName            string             `json:"owner_name"`
+	OwnerEmail           string             `json:"owner_email"`
+	MemberRole           string             `json:"member_role"`
+	MemberCount          int64              `json:"member_count"`
+}
+
+func (q *Queries) ListWorkspacesForUserWithContext(ctx context.Context, userID uuid.UUID) ([]ListWorkspacesForUserWithContextRow, error) {
+	rows, err := q.db.Query(ctx, listWorkspacesForUserWithContext, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListWorkspacesForUserWithContextRow{}
+	for rows.Next() {
+		var i ListWorkspacesForUserWithContextRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.LogoUrl,
+			&i.Plan,
+			&i.OwnerID,
+			&i.AnalysesThisMonth,
+			&i.AnalysesLimit,
+			&i.ApiRequestsThisMonth,
+			&i.ApiRequestsLimit,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.BrandPrimaryColor,
+			&i.BrandSecondaryColor,
+			&i.BrandFont,
+			&i.OwnerName,
+			&i.OwnerEmail,
+			&i.MemberRole,
+			&i.MemberCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const removeWorkspaceMember = `-- name: RemoveWorkspaceMember :execrows
+DELETE FROM workspace_members
+WHERE workspace_id = $1 AND user_id = $2
+`
+
+type RemoveWorkspaceMemberParams struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	UserID      uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) RemoveWorkspaceMember(ctx context.Context, arg RemoveWorkspaceMemberParams) (int64, error) {
+	result, err := q.db.Exec(ctx, removeWorkspaceMember, arg.WorkspaceID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const updateWorkspaceBrand = `-- name: UpdateWorkspaceBrand :one
 UPDATE workspaces
 SET brand_primary_color = $2, brand_secondary_color = $3, brand_font = $4, updated_at = NOW()
@@ -240,6 +335,41 @@ func (q *Queries) UpdateWorkspaceBrand(ctx context.Context, arg UpdateWorkspaceB
 		arg.BrandSecondaryColor,
 		arg.BrandFont,
 	)
+	var i Workspace
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.LogoUrl,
+		&i.Plan,
+		&i.OwnerID,
+		&i.AnalysesThisMonth,
+		&i.AnalysesLimit,
+		&i.ApiRequestsThisMonth,
+		&i.ApiRequestsLimit,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.BrandPrimaryColor,
+		&i.BrandSecondaryColor,
+		&i.BrandFont,
+	)
+	return i, err
+}
+
+const updateWorkspaceName = `-- name: UpdateWorkspaceName :one
+UPDATE workspaces SET name = $2, updated_at = NOW()
+WHERE id = $1 AND deleted_at IS NULL
+RETURNING id, name, slug, logo_url, plan, owner_id, analyses_this_month, analyses_limit, api_requests_this_month, api_requests_limit, created_at, updated_at, deleted_at, brand_primary_color, brand_secondary_color, brand_font
+`
+
+type UpdateWorkspaceNameParams struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
+}
+
+func (q *Queries) UpdateWorkspaceName(ctx context.Context, arg UpdateWorkspaceNameParams) (Workspace, error) {
+	row := q.db.QueryRow(ctx, updateWorkspaceName, arg.ID, arg.Name)
 	var i Workspace
 	err := row.Scan(
 		&i.ID,

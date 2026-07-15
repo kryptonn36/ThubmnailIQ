@@ -70,7 +70,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	res, err := h.uc.Login(c.Request.Context(), req.Email, req.Password)
+	res, err := h.uc.Login(c.Request.Context(), req.Email, req.Password, useruc.LoginDevice{
+		IP:        c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	})
 	if err != nil {
 		respondError(c, err)
 		return

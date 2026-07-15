@@ -3,6 +3,7 @@ package workspace
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -33,6 +34,44 @@ func (u *Usecase) Create(ctx context.Context, ownerID uuid.UUID, name string) (*
 
 func (u *Usecase) List(ctx context.Context, userID uuid.UUID) ([]*workspace.Workspace, error) {
 	return u.workspaces.ListForUser(ctx, userID)
+}
+
+// ListWithContext returns the user's workspaces enriched with owner identity,
+// the user's own role, and member count — everything the UI needs to show
+// whose workspace each one is and what the viewer may do in it.
+func (u *Usecase) ListWithContext(ctx context.Context, userID uuid.UUID) ([]*workspace.Summary, error) {
+	return u.workspaces.ListForUserWithContext(ctx, userID)
+}
+
+// Rename changes the workspace's display name. The slug is deliberately left
+// untouched: it's already used in external references and stays stable for
+// the workspace's lifetime, like most SaaS products handle renames.
+func (u *Usecase) Rename(ctx context.Context, workspaceID uuid.UUID, name string) (*workspace.Workspace, error) {
+	name = strings.TrimSpace(name)
+	if name == "" || len(name) > 100 {
+		return nil, errors.ErrInvalidInput
+	}
+	return u.workspaces.Rename(ctx, workspaceID, name)
+}
+
+// RemoveMember removes a member from the workspace. Rules mirror common team
+// products: the owner can never be removed (ownership transfer is not
+// supported here), any non-owner may remove themselves (leave), and removing
+// someone else requires the actor to be owner or admin.
+func (u *Usecase) RemoveMember(ctx context.Context, workspaceID, actorID, memberUserID uuid.UUID) error {
+	ws, err := u.workspaces.GetByID(ctx, workspaceID)
+	if err != nil {
+		return err
+	}
+	if memberUserID == ws.OwnerID {
+		return errors.ErrForbidden
+	}
+	if actorID != memberUserID {
+		if err := u.EnsureRole(ctx, actorID, workspaceID, "owner", "admin"); err != nil {
+			return err
+		}
+	}
+	return u.workspaces.RemoveMember(ctx, workspaceID, memberUserID)
 }
 
 func (u *Usecase) Get(ctx context.Context, id uuid.UUID) (*workspace.Workspace, error) {
@@ -77,12 +116,25 @@ func (u *Usecase) EnsureRole(ctx context.Context, userID, workspaceID uuid.UUID,
 	return errors.ErrForbidden
 }
 
+// invitableRoles are the roles a member can be granted. "owner" is
+// deliberately absent: there is exactly one owner (the creator) and ownership
+// can't be handed out via invites.
+var invitableRoles = map[string]bool{"admin": true, "editor": true, "viewer": true}
+
 // InviteMember requires the invited user to already have an account; this
 // MVP doesn't implement invite-by-email for not-yet-registered users.
 func (u *Usecase) InviteMember(ctx context.Context, workspaceID uuid.UUID, email, role string) (*workspace.Member, error) {
-	invited, err := u.users.GetByEmail(ctx, email)
+	if !invitableRoles[role] {
+		return nil, errors.ErrInvalidInput
+	}
+	invited, err := u.users.GetByEmail(ctx, validator.NormalizeEmail(email))
 	if err != nil {
 		return nil, errors.ErrNotFound
+	}
+	if already, err := u.workspaces.IsMember(ctx, workspaceID, invited.ID); err != nil {
+		return nil, err
+	} else if already {
+		return nil, errors.ErrAlreadyExists
 	}
 	return u.workspaces.AddMember(ctx, workspaceID, invited.ID, role)
 }

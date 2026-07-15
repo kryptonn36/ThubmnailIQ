@@ -67,7 +67,7 @@ func TestLoginNormalizesEmailAndIssuesRefreshToken(t *testing.T) {
 	uc := newTestUsecase(users, &fakeWorkspaceRepo{})
 	users.seedUser("user@example.com", "password123", "Jane Creator")
 
-	res, err := uc.Login(context.Background(), "  USER@Example.COM  ", "password123")
+	res, err := uc.Login(context.Background(), "  USER@Example.COM  ", "password123", LoginDevice{})
 	if err != nil {
 		t.Fatalf("Login returned error: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestRefreshRotatesTokenAndRejectsReuse(t *testing.T) {
 	uc := newTestUsecase(users, &fakeWorkspaceRepo{})
 	users.seedUser("user@example.com", "password123", "Jane Creator")
 
-	loginRes, err := uc.Login(context.Background(), "user@example.com", "password123")
+	loginRes, err := uc.Login(context.Background(), "user@example.com", "password123", LoginDevice{})
 	if err != nil {
 		t.Fatalf("Login returned error: %v", err)
 	}
@@ -273,10 +273,10 @@ func TestPasswordResetFlow(t *testing.T) {
 		t.Fatalf("reset: expected success, got %v", err)
 	}
 	// New password now works; old one doesn't.
-	if _, err := uc.Login(context.Background(), "user@example.com", "newpassword1"); err != nil {
+	if _, err := uc.Login(context.Background(), "user@example.com", "newpassword1", LoginDevice{}); err != nil {
 		t.Fatalf("login with new password failed: %v", err)
 	}
-	if _, err := uc.Login(context.Background(), "user@example.com", "oldpassword1"); err != apperrors.ErrUnauthorized {
+	if _, err := uc.Login(context.Background(), "user@example.com", "oldpassword1", LoginDevice{}); err != apperrors.ErrUnauthorized {
 		t.Fatalf("old password should be rejected, got %v", err)
 	}
 	// Existing sessions were revoked.
@@ -534,6 +534,18 @@ func (r *fakeWorkspaceRepo) ListMembers(_ context.Context, _ uuid.UUID) ([]*work
 
 func (r *fakeWorkspaceRepo) IsMember(_ context.Context, _, _ uuid.UUID) (bool, error) {
 	return true, nil
+}
+
+func (r *fakeWorkspaceRepo) ListForUserWithContext(_ context.Context, _ uuid.UUID) ([]*workspace.Summary, error) {
+	return nil, nil
+}
+
+func (r *fakeWorkspaceRepo) Rename(_ context.Context, _ uuid.UUID, _ string) (*workspace.Workspace, error) {
+	return nil, apperrors.ErrNotFound
+}
+
+func (r *fakeWorkspaceRepo) RemoveMember(_ context.Context, _, _ uuid.UUID) error {
+	return apperrors.ErrNotFound
 }
 
 func (r *fakeWorkspaceRepo) IncrementAnalysesUsage(_ context.Context, _ uuid.UUID) error {

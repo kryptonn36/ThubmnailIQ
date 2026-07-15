@@ -9,12 +9,16 @@ import (
 	apperrors "github.com/thumbnailiq/thumbnailiq/pkg/errors"
 )
 
-// resolveWorkspaceID lets clients omit workspace_id and fall back to the
-// caller's first workspace. Every user gets exactly one auto-created
-// workspace at registration in this build, so this keeps single-workspace
-// clients (like the bundled web app) simple while still letting
-// multi-workspace API consumers pass workspace_id explicitly.
+// resolveWorkspaceID resolves which workspace a request operates on, most
+// specific source first: an explicit workspace_id in the query/body, then the
+// X-Workspace-ID header (set by the web app to its currently selected
+// workspace, so every endpoint follows the switcher without each call site
+// threading an id), and finally the caller's first workspace as a fallback
+// for single-workspace clients.
 func resolveWorkspaceID(c *gin.Context, raw string, workspaces *workspaceuc.Usecase) (uuid.UUID, error) {
+	if raw == "" {
+		raw = c.GetHeader("X-Workspace-ID")
+	}
 	if raw != "" {
 		id, err := uuid.Parse(raw)
 		if err != nil {

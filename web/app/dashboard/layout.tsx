@@ -7,6 +7,7 @@ import { Menu } from "lucide-react";
 import Sidebar, { MobileSidebar } from "@/components/Sidebar";
 import { Spinner } from "@/components/ui/Spinner";
 import { isAuthenticated } from "@/lib/auth";
+import { WorkspaceProvider } from "@/hooks/useWorkspace";
 
 export default function DashboardLayout({
   children,
@@ -35,6 +36,7 @@ export default function DashboardLayout({
   }
 
   return (
+    <WorkspaceProvider>
     <div className="flex min-h-screen">
       <Sidebar />
       <MobileSidebar open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
@@ -58,5 +60,6 @@ export default function DashboardLayout({
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-8">{children}</main>
       </div>
     </div>
+    </WorkspaceProvider>
   );
 }

@@ -121,23 +121,32 @@ func main() {
 	// tokens can never be parsed as one another.
 	adminJWTSvc := jwt.NewService(cfg.AdminJWT.AccessSecret, cfg.AdminJWT.RefreshSecret, cfg.AdminJWT.AccessTTL, cfg.AdminJWT.RefreshTTL)
 
+	// Email provider selection: MailerSend's HTTP API when configured,
+	// otherwise SMTP, otherwise no email (codes generated but not sent).
+	mailerSendCfg := email.MailerSendConfig{
+		APIKey: cfg.MailerSend.APIKey, From: cfg.MailerSend.From, FromName: cfg.MailerSend.FromName,
+	}
 	mailCfg := email.Config{
 		Host: cfg.SMTP.Host, Port: cfg.SMTP.Port,
 		Username: cfg.SMTP.Username, Password: cfg.SMTP.Password,
 		From: cfg.SMTP.From, FromName: cfg.SMTP.FromName,
 	}
 	var mailer useruc.Mailer
-	if mailCfg.Configured() {
+	switch {
+	case mailerSendCfg.Configured():
+		mailer = email.NewMailerSendMailer(mailerSendCfg)
+		log.Info().Str("from", mailerSendCfg.From).Msg("email delivery configured via MailerSend API")
+	case mailCfg.Configured():
 		mailer = email.NewSMTPMailer(mailCfg)
-		log.Info().Str("smtp_host", mailCfg.Host).Msg("email delivery configured")
-	} else {
-		log.Warn().Msg("SMTP not configured; email verification codes will be generated but not sent")
+		log.Info().Str("smtp_host", mailCfg.Host).Msg("email delivery configured via SMTP")
+	default:
+		log.Warn().Msg("no email provider configured; verification codes will be generated but not sent")
 	}
 
 	userUC := useruc.NewUsecase(userRepo, workspaceRepo, jwtSvc, mailer, log)
 	workspaceUC := workspaceuc.NewUsecase(workspaceRepo, userRepo)
 	analysisUC := analysisuc.NewUsecase(analysisRepo, workspaceRepo, storage, cdnBuilder, cvClient, queueClient)
-	billingUC := billinguc.NewUsecase(billingRepo, workspaceRepo, gateway, pendingOrders, cfg.Payment.Currency)
+	billingUC := billinguc.NewUsecase(billingRepo, workspaceRepo, userRepo, gateway, pendingOrders, cfg.Payment.Currency, mailer, log)
 	trackingUC := trackinguc.NewUsecase(competitorRepo)
 	viralDBUC := viraldbuc.NewUsecase(viralDBRepo, ytFetcher)
 	adminUC := adminuc.NewUsecase(adminRepo, adminJWTSvc, healthChecker)

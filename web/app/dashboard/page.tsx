@@ -22,7 +22,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useMotionVariants } from "@/lib/motion";
-import type { AnalysisSummary, PaginatedResponse, Workspace } from "@/types";
+import { useWorkspace } from "@/hooks/useWorkspace";
+import type { AnalysisSummary, PaginatedResponse } from "@/types";
 
 const QUICK_ACTIONS: {
   href: string;
@@ -81,23 +82,21 @@ const ACCENT_ICON_CLASSES: Record<string, string> = {
 };
 
 export default function DashboardPage() {
-  const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const { workspace, loading: workspaceLoading } = useWorkspace();
   const [analyses, setAnalyses] = useState<AnalysisSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { fadeInUp, staggerContainer } = useMotionVariants();
 
+  // Re-fetches whenever the selected workspace changes, so the overview
+  // always reflects the workspace shown in the switcher.
   useEffect(() => {
+    if (workspaceLoading) return;
     let cancelled = false;
     async function load() {
       try {
-        const workspaces = await api.get<Workspace[]>("/workspaces");
-        const ws = workspaces[0] ?? null;
-        if (cancelled) return;
-        setWorkspace(ws);
-
         const res = await api.get<PaginatedResponse<AnalysisSummary>>("/analyses", {
-          workspace_id: ws?.id,
+          workspace_id: workspace?.id,
           page: 1,
           per_page: 8,
         });
@@ -114,7 +113,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [workspace?.id, workspaceLoading]);
 
   const completedAnalyses = analyses.filter((a) => a.status === "complete" && a.score !== null);
   const avgScore = completedAnalyses.length
@@ -135,7 +134,7 @@ export default function DashboardPage() {
           title={workspace ? workspace.name : "Overview"}
           description={
             workspace
-              ? `${workspace.plan} plan · ${workspace.analyses_this_month} of ${workspace.analyses_limit} analyses used this month`
+              ? `Owned by ${workspace.owner_name || workspace.owner_email} · ${workspace.plan} plan · ${workspace.analyses_this_month} of ${workspace.analyses_limit} analyses used this month`
               : "Your ThumbnailIQ workspace"
           }
           actions={

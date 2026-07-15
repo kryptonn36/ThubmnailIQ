@@ -3,28 +3,40 @@ package billing
 import (
 	"context"
 	"fmt"
+	"html"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 
 	"github.com/thumbnailiq/thumbnailiq/internal/domain/billing"
 	"github.com/thumbnailiq/thumbnailiq/internal/domain/payment"
+	"github.com/thumbnailiq/thumbnailiq/internal/domain/user"
 	"github.com/thumbnailiq/thumbnailiq/internal/domain/workspace"
 	"github.com/thumbnailiq/thumbnailiq/pkg/errors"
 	"github.com/thumbnailiq/thumbnailiq/pkg/hash"
 )
 
+// Mailer is the narrow email dependency this usecase needs for subscription
+// confirmation emails. The concrete implementation lives in internal/infra/email.
+type Mailer interface {
+	Send(ctx context.Context, to, subject, textBody, htmlBody string) error
+}
+
 type Usecase struct {
 	billing    billing.Repository
 	workspaces workspace.Repository
+	users      user.Repository
 	gateway    payment.Gateway
 	orders     payment.PendingOrderStore
 	currency   string
+	mailer     Mailer
+	log        zerolog.Logger
 }
 
-func NewUsecase(billingRepo billing.Repository, workspaces workspace.Repository, gateway payment.Gateway, orders payment.PendingOrderStore, currency string) *Usecase {
-	return &Usecase{billing: billingRepo, workspaces: workspaces, gateway: gateway, orders: orders, currency: currency}
+func NewUsecase(billingRepo billing.Repository, workspaces workspace.Repository, users user.Repository, gateway payment.Gateway, orders payment.PendingOrderStore, currency string, mailer Mailer, log zerolog.Logger) *Usecase {
+	return &Usecase{billing: billingRepo, workspaces: workspaces, users: users, gateway: gateway, orders: orders, currency: currency, mailer: mailer, log: log}
 }
 
 func (u *Usecase) Plans() []billing.Plan {
@@ -201,7 +213,58 @@ func (u *Usecase) activate(ctx context.Context, workspaceID uuid.UUID, planDef *
 	if _, err := u.workspaces.UpdatePlan(ctx, workspaceID, planDef.ID, planDef.AnalysesLimit); err != nil {
 		return nil, err
 	}
+	// The plan is live at this point; the confirmation email is notification
+	// only and must never fail or delay the activation.
+	u.notifySubscriptionActivated(workspaceID, planDef, periodEnd)
 	return sub, nil
+}
+
+// notifySubscriptionActivated emails the workspace owner that their plan is
+// active. It runs in the background and only logs failures: a mail outage
+// must never make a paid activation look failed to the customer.
+func (u *Usecase) notifySubscriptionActivated(workspaceID uuid.UUID, planDef *billing.Plan, periodEnd time.Time) {
+	if u.mailer == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		ws, err := u.workspaces.GetByID(ctx, workspaceID)
+		if err != nil {
+			u.log.Error().Err(err).Str("workspace_id", workspaceID.String()).Msg("loading workspace for subscription email")
+			return
+		}
+		owner, err := u.users.GetByID(ctx, ws.OwnerID)
+		if err != nil {
+			u.log.Error().Err(err).Str("workspace_id", workspaceID.String()).Msg("loading workspace owner for subscription email")
+			return
+		}
+
+		price := "Free"
+		if planDef.PriceMonthly > 0 {
+			price = fmt.Sprintf("%.2f %s/month", planDef.PriceMonthly, u.currency)
+		}
+		until := periodEnd.Format("Jan 2, 2006")
+
+		subject := fmt.Sprintf("Your ThumbnailIQ %s plan is now active", planDef.Name)
+		text := fmt.Sprintf("Hi %s,\n\nYour %q workspace is now on the %s plan (%s).\n\nWhat you get:\n- %s\n\nYour current period runs until %s.\n\nThanks for using ThumbnailIQ!",
+			owner.FullName, ws.Name, planDef.Name, price, strings.Join(planDef.Features, "\n- "), until)
+
+		features := make([]string, 0, len(planDef.Features))
+		for _, f := range planDef.Features {
+			features = append(features, "<li>"+html.EscapeString(f)+"</li>")
+		}
+		htmlBody := fmt.Sprintf(`<p>Hi %s,</p><p>Your <strong>%s</strong> workspace is now on the <strong>%s</strong> plan (%s).</p>`+
+			`<p>What you get:</p><ul>%s</ul>`+
+			`<p>Your current period runs until <strong>%s</strong>.</p><p>Thanks for using ThumbnailIQ!</p>`,
+			html.EscapeString(owner.FullName), html.EscapeString(ws.Name), html.EscapeString(planDef.Name),
+			html.EscapeString(price), strings.Join(features, ""), until)
+
+		if err := u.mailer.Send(ctx, owner.Email, subject, text, htmlBody); err != nil {
+			u.log.Error().Err(err).Str("workspace_id", workspaceID.String()).Str("plan", planDef.ID).Msg("sending subscription confirmation email")
+		}
+	}()
 }
 
 func (u *Usecase) CreateAPIKey(ctx context.Context, workspaceID, userID uuid.UUID, name string) (string, *billing.APIKey, error) {

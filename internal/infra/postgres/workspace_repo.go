@@ -67,6 +67,58 @@ func (r *WorkspaceRepo) ListForUser(ctx context.Context, userID uuid.UUID) ([]*w
 	return out, nil
 }
 
+func (r *WorkspaceRepo) ListForUserWithContext(ctx context.Context, userID uuid.UUID) ([]*workspace.Summary, error) {
+	rows, err := r.q.ListWorkspacesForUserWithContext(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*workspace.Summary, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, &workspace.Summary{
+			Workspace: workspace.Workspace{
+				ID:                  row.ID,
+				Name:                row.Name,
+				Slug:                row.Slug,
+				Plan:                row.Plan,
+				OwnerID:             row.OwnerID,
+				AnalysesThisMonth:   int(row.AnalysesThisMonth),
+				AnalysesLimit:       int(row.AnalysesLimit),
+				BrandPrimaryColor:   textVal(row.BrandPrimaryColor),
+				BrandSecondaryColor: textVal(row.BrandSecondaryColor),
+				BrandFont:           textVal(row.BrandFont),
+				CreatedAt:           tsVal(row.CreatedAt),
+			},
+			OwnerName:   row.OwnerName,
+			OwnerEmail:  row.OwnerEmail,
+			Role:        row.MemberRole,
+			MemberCount: int(row.MemberCount),
+		})
+	}
+	return out, nil
+}
+
+func (r *WorkspaceRepo) Rename(ctx context.Context, workspaceID uuid.UUID, name string) (*workspace.Workspace, error) {
+	w, err := r.q.UpdateWorkspaceName(ctx, db.UpdateWorkspaceNameParams{ID: workspaceID, Name: name})
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, apperrors.ErrNotFound
+		}
+		return nil, err
+	}
+	return toDomainWorkspace(w), nil
+}
+
+func (r *WorkspaceRepo) RemoveMember(ctx context.Context, workspaceID, userID uuid.UUID) error {
+	n, err := r.q.RemoveWorkspaceMember(ctx, db.RemoveWorkspaceMemberParams{WorkspaceID: workspaceID, UserID: userID})
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return apperrors.ErrNotFound
+	}
+	return nil
+}
+
 func (r *WorkspaceRepo) AddMember(ctx context.Context, workspaceID, userID uuid.UUID, role string) (*workspace.Member, error) {
 	m, err := r.q.AddWorkspaceMember(ctx, db.AddWorkspaceMemberParams{WorkspaceID: workspaceID, UserID: userID, Role: role})
 	if err != nil {

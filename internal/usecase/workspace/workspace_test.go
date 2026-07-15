@@ -63,6 +63,47 @@ func TestInviteMemberReturnsNotFoundForUnknownEmail(t *testing.T) {
 	}
 }
 
+func TestInviteMemberRejectsOwnerRole(t *testing.T) {
+	invited := &domainuser.User{ID: uuid.New(), Email: "member@example.com"}
+	users := &fakeUserRepo{byEmail: map[string]*domainuser.User{invited.Email: invited}}
+	uc := NewUsecase(&fakeWorkspaceRepo{}, users)
+
+	if _, err := uc.InviteMember(context.Background(), uuid.New(), "member@example.com", "owner"); err != apperrors.ErrInvalidInput {
+		t.Fatalf("inviting as owner should be rejected, got %v", err)
+	}
+}
+
+func TestRemoveMemberRules(t *testing.T) {
+	users := &fakeUserRepo{}
+	workspaces := &fakeWorkspaceRepo{byID: make(map[uuid.UUID]*domainworkspace.Workspace)}
+	uc := NewUsecase(workspaces, users)
+
+	ownerID := uuid.New()
+	ws, err := uc.Create(context.Background(), ownerID, "Team Space")
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	editor, _ := workspaces.AddMember(context.Background(), ws.ID, uuid.New(), "editor")
+	viewer, _ := workspaces.AddMember(context.Background(), ws.ID, uuid.New(), "viewer")
+
+	// The owner can never be removed, not even by themselves.
+	if err := uc.RemoveMember(context.Background(), ws.ID, ownerID, ownerID); err != apperrors.ErrForbidden {
+		t.Fatalf("removing the owner should be forbidden, got %v", err)
+	}
+	// A plain member cannot remove someone else.
+	if err := uc.RemoveMember(context.Background(), ws.ID, editor.UserID, viewer.UserID); err != apperrors.ErrForbidden {
+		t.Fatalf("editor removing another member should be forbidden, got %v", err)
+	}
+	// A member may leave (remove themselves) without any special role.
+	if err := uc.RemoveMember(context.Background(), ws.ID, viewer.UserID, viewer.UserID); err != nil {
+		t.Fatalf("viewer leaving should succeed, got %v", err)
+	}
+	// The owner can remove any non-owner member.
+	if err := uc.RemoveMember(context.Background(), ws.ID, ownerID, editor.UserID); err != nil {
+		t.Fatalf("owner removing editor should succeed, got %v", err)
+	}
+}
+
 type fakeWorkspaceRepo struct {
 	byID    map[uuid.UUID]*domainworkspace.Workspace
 	members []*domainworkspace.Member
@@ -99,6 +140,35 @@ func (r *fakeWorkspaceRepo) ListForUser(_ context.Context, userID uuid.UUID) ([]
 		}
 	}
 	return out, nil
+}
+
+func (r *fakeWorkspaceRepo) ListForUserWithContext(_ context.Context, userID uuid.UUID) ([]*domainworkspace.Summary, error) {
+	var out []*domainworkspace.Summary
+	for _, ws := range r.byID {
+		if ws.OwnerID == userID {
+			out = append(out, &domainworkspace.Summary{Workspace: *ws, Role: "owner", MemberCount: len(r.members)})
+		}
+	}
+	return out, nil
+}
+
+func (r *fakeWorkspaceRepo) Rename(_ context.Context, id uuid.UUID, name string) (*domainworkspace.Workspace, error) {
+	ws := r.byID[id]
+	if ws == nil {
+		return nil, apperrors.ErrNotFound
+	}
+	ws.Name = name
+	return ws, nil
+}
+
+func (r *fakeWorkspaceRepo) RemoveMember(_ context.Context, _, userID uuid.UUID) error {
+	for i, m := range r.members {
+		if m.UserID == userID {
+			r.members = append(r.members[:i], r.members[i+1:]...)
+			return nil
+		}
+	}
+	return apperrors.ErrNotFound
 }
 
 func (r *fakeWorkspaceRepo) AddMember(_ context.Context, workspaceID, userID uuid.UUID, role string) (*domainworkspace.Member, error) {
