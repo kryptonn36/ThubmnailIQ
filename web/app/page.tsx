@@ -4,6 +4,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, CheckCircle2, Handshake, History, Target, TrendingUp } from "lucide-react";
 import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useMotionVariants } from "@/lib/motion";
@@ -147,9 +148,7 @@ export default function LandingPage() {
         </motion.section>
       </main>
 
-      <footer className="border-t border-surface-300 px-6 py-8 text-center text-sm text-gray-500">
-        © {new Date().getFullYear()} ThumbnailIQ. All rights reserved.
-      </footer>
+      <Footer />
     </div>
   );
 }

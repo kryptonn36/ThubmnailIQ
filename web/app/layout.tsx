@@ -11,6 +11,10 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  // metadataBase makes relative `alternates.canonical` values (e.g. on
+  // /privacy) resolve to absolute URLs. Set NEXT_PUBLIC_SITE_URL to the real
+  // production origin when deploying.
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
   title: "ThumbnailIQ — YouTube Thumbnail Intelligence",
   description:
     "Know your thumbnail's performance before you publish. Competitive intelligence, objective scoring, and actionable guidance for YouTube creators.",
