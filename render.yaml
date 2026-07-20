@@ -1,0 +1,172 @@
+# Render Blueprint — declares the backend topology (API, worker, CV
+# microservice, Postgres) as code so it can be provisioned in one pass
+# instead of clicked together manually.
+#
+# Deploy: push this file to the repo, then in the Render dashboard choose
+# "New +" -> "Blueprint" and point it at this repo/branch. Render parses this
+# file and shows you everything it's about to create before you confirm.
+#
+# Two fields below are flagged inline because Render has renamed things
+# across product updates and I can't confirm the exact current keyword from
+# here — Render validates the file immediately when you create the
+# Blueprint, so if either is rejected, the error message will say which key
+# it wants; swap in the alternative noted in the comment and resync.
+#
+# Secrets are intentionally left as `sync: false` (never committed to git).
+# Render prompts for each one in the dashboard on first deploy — see the
+# deployment guide for what to fill in.
+
+databases:
+  - name: thumbnailiq-db
+    databaseName: thumbnailiq
+    user: thumbnailiq
+    plan: starter
+    region: oregon
+
+services:
+  # --- Computer-vision microservice (Python/FastAPI), used by the API for
+  # thumbnail analysis. ------------------------------------------------------
+  - type: web
+    name: thumbnailiq-cv
+    runtime: docker # if Render rejects this key, try `env: docker` instead
+    dockerfilePath: ./services/cv/Dockerfile
+    dockerContext: ./services/cv
+    plan: starter
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8001"
+
+  # --- API server (Go) -------------------------------------------------------
+  - type: web
+    name: thumbnailiq-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: SERVER_ENV
+        value: production
+      # Render injects the real listening port at $PORT; the app itself
+      # reads SERVER_PORT (see internal/config/config.go), so this just
+      # keeps both in sync at 8080, matching the Dockerfile's EXPOSE.
+      - key: PORT
+        value: "8080"
+      - key: SERVER_PORT
+        value: "8080"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: thumbnailiq-db
+          property: connectionString
+      # Render's private network resolves other services in the same
+      # account by http://<service-name>:<port> — this is stable Render
+      # platform behavior, not blueprint-schema-specific, so it's hardcoded
+      # rather than left for manual entry.
+      - key: CV_SERVICE_URL
+        value: http://thumbnailiq-cv:8001
+      # Create a Key Value (Redis) instance once via the dashboard (see the
+      # deployment guide) and paste its internal host:port/password here.
+      # Left manual rather than auto-wired because this app expects them as
+      # separate ADDR/PASSWORD fields, not a single connection URL.
+      - key: REDIS_ADDR
+        sync: false
+      - key: REDIS_PASSWORD
+        sync: false
+      # Render generates and stores a strong random value for each of these
+      # on first deploy — never put real secrets in this file.
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: ADMIN_JWT_ACCESS_SECRET
+        generateValue: true
+      - key: ADMIN_JWT_REFRESH_SECRET
+        generateValue: true
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      # Empty = use real AWS endpoints (see .env.example); only set
+      # S3_ENDPOINT for a non-AWS/self-hosted bucket provider.
+      - key: S3_ENDPOINT
+        value: ""
+      - key: S3_REGION
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_UPLOAD_BUCKET
+        sync: false
+      - key: S3_USE_PATH_STYLE
+        value: "false"
+      # Keep the bucket private in production; only true for local/MinIO
+      # dev where nothing else fronts it (see config.go's comment).
+      - key: S3_PUBLIC_READ
+        value: "false"
+      - key: CLOUDFRONT_DOMAIN
+        sync: false
+      - key: PAYMENT_PROVIDER
+        value: razorpay
+      - key: PAYMENT_CURRENCY
+        value: USD
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: MAILERSEND_API_KEY
+        sync: false
+      - key: MAILERSEND_FROM
+        sync: false
+      - key: MAILERSEND_FROM_NAME
+        value: ThumbnailIQ
+      - key: YOUTUBE_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.0-flash
+
+  # --- Background worker (Go, asynq queue consumer) — same image as the API,
+  # different start command, no HTTP traffic so it's a Background Worker
+  # rather than a Web Service. -------------------------------------------
+  - type: worker
+    name: thumbnailiq-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: ./worker
+    plan: starter
+    region: oregon
+    envVars:
+      - key: SERVER_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: thumbnailiq-db
+          property: connectionString
+      - key: CV_SERVICE_URL
+        value: http://thumbnailiq-cv:8001
+      - key: REDIS_ADDR
+        sync: false
+      - key: REDIS_PASSWORD
+        sync: false
+      - key: S3_ENDPOINT
+        value: ""
+      - key: S3_REGION
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_UPLOAD_BUCKET
+        sync: false
+      - key: CLOUDFRONT_DOMAIN
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.0-flash

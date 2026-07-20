@@ -1,6 +1,9 @@
-web/node_modules
-web/.next
-services/cv/.venv
+# The Go image (Dockerfile / Dockerfile.dev) only ever builds ./cmd/...,
+# so the frontend apps and the Python CV microservice never need to be in
+# its build context — excluding them outright keeps `docker build` fast.
+web
+admin-web
+services
 .git
 tmp
 bin
