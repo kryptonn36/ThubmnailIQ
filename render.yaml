@@ -21,7 +21,7 @@ databases:
     databaseName: thumbnailiq
     user: thumbnailiq
     plan: basic-256mb
-    region: oregon
+    region: Singapore
 
 services:
   # --- Computer-vision microservice (Python/FastAPI), used by the API for
@@ -32,7 +32,7 @@ services:
     dockerfilePath: ./services/cv/Dockerfile
     dockerContext: ./services/cv
     plan: starter
-    region: oregon
+    region: Singapore
     healthCheckPath: /health
     envVars:
       - key: PORT
@@ -45,7 +45,7 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
     plan: starter
-    region: oregon
+    region: Singapore
     healthCheckPath: /health
     envVars:
       - key: SERVER_ENV
@@ -140,7 +140,7 @@ services:
     dockerContext: .
     dockerCommand: ./worker
     plan: starter
-    region: oregon
+    region: Singapore
     envVars:
       - key: SERVER_ENV
         value: production
