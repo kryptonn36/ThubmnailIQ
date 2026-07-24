@@ -17,39 +17,46 @@ import (
 	"github.com/thumbnailiq/thumbnailiq/pkg/jwt"
 )
 
-func TestRegisterNormalizesEmailCreatesWorkspaceAndQueuesCode(t *testing.T) {
+func TestRegisterDoesNotPersistAccountUntilVerified(t *testing.T) {
 	users := newFakeUserRepo(t)
 	workspaces := &fakeWorkspaceRepo{}
-	uc := newTestUsecase(users, workspaces)
+	pendingRegs := newFakePendingRegistrationStore()
+	uc := NewUsecase(
+		users,
+		workspaces,
+		jwt.NewService("test-access-secret", "test-refresh-secret", 15*time.Minute, 7*24*time.Hour),
+		nil,
+		pendingRegs,
+		zerolog.Nop(),
+	)
 
-	usr, err := uc.Register(context.Background(), "  USER@Example.COM  ", "password123", "  Jane Creator  ")
+	email, err := uc.Register(context.Background(), "  USER@Example.COM  ", "password123", "  Jane Creator  ")
 	if err != nil {
 		t.Fatalf("Register returned error: %v", err)
 	}
+	if email != "user@example.com" {
+		t.Fatalf("expected normalized email, got %q", email)
+	}
 
-	if usr.Email != "user@example.com" {
-		t.Fatalf("expected normalized email, got %q", usr.Email)
+	// Nothing is written to the users table (or its workspace) until the
+	// code is verified — an unverified signup must leave no permanent trace.
+	if _, err := users.GetByEmail(context.Background(), "user@example.com"); err != apperrors.ErrNotFound {
+		t.Fatalf("expected no user row before verification, got err=%v", err)
 	}
-	if usr.FullName != "Jane Creator" {
-		t.Fatalf("expected trimmed full name, got %q", usr.FullName)
-	}
-	// Registration must NOT log the user in: no tokens until email is verified.
-	if usr.EmailVerified {
-		t.Fatal("new account should start unverified")
+	if len(workspaces.created) != 0 {
+		t.Fatal("Register must not create a workspace before verification")
 	}
 	if len(users.refreshByHash) != 0 {
 		t.Fatal("Register must not issue a refresh token before verification")
 	}
-	// A verification code should have been generated for the new user.
-	if users.verifications[usr.ID] == nil {
-		t.Fatal("expected a verification code to be queued on register")
-	}
 
-	if len(workspaces.created) != 1 {
-		t.Fatalf("expected one workspace to be created, got %d", len(workspaces.created))
+	// The pending registration is what actually holds the signup.
+	pending, err := pendingRegs.Get(context.Background(), "user@example.com")
+	if err != nil {
+		t.Fatalf("expected a pending registration to be queued on register: %v", err)
 	}
-	if len(workspaces.members) != 1 {
-		t.Fatalf("expected owner membership to be created, got %d", len(workspaces.members))
+	if pending.FullName != "Jane Creator" {
+		t.Fatalf("expected trimmed full name, got %q", pending.FullName)
 	}
 }
 
@@ -127,6 +134,7 @@ func newTestUsecase(users *fakeUserRepo, workspaces *fakeWorkspaceRepo) *Usecase
 		workspaces,
 		jwt.NewService("test-access-secret", "test-refresh-secret", 15*time.Minute, 7*24*time.Hour),
 		nil,
+		newFakePendingRegistrationStore(),
 		zerolog.Nop(),
 	)
 }
@@ -146,12 +154,14 @@ var otpPattern = regexp.MustCompile(`\b\d{6}\b`)
 
 func TestEmailVerificationFlow(t *testing.T) {
 	users := newFakeUserRepo(t)
+	workspaces := &fakeWorkspaceRepo{}
 	mailer := &captureMailer{}
 	uc := NewUsecase(
 		users,
-		&fakeWorkspaceRepo{},
+		workspaces,
 		jwt.NewService("a", "b", 15*time.Minute, 7*24*time.Hour),
 		mailer,
+		newFakePendingRegistrationStore(),
 		zerolog.Nop(),
 	)
 
@@ -161,12 +171,16 @@ func TestEmailVerificationFlow(t *testing.T) {
 	if mailer.calls != 1 {
 		t.Fatalf("expected 1 verification email on register, got %d", mailer.calls)
 	}
+	// Registering must not create the account yet — only a pending signup.
+	if _, err := users.GetByEmail(context.Background(), "user@example.com"); err != apperrors.ErrNotFound {
+		t.Fatalf("expected no user row before verification, got err=%v", err)
+	}
 	code := otpPattern.FindString(mailer.lastText)
 	if code == "" {
 		t.Fatalf("no 6-digit code found in verification email: %q", mailer.lastText)
 	}
 
-	// A wrong code is rejected and must not verify the account.
+	// A wrong code is rejected and must not create the account.
 	wrong := "000000"
 	if wrong == code {
 		wrong = "999999"
@@ -174,12 +188,12 @@ func TestEmailVerificationFlow(t *testing.T) {
 	if _, err := uc.VerifyEmail(context.Background(), "user@example.com", wrong); err != apperrors.ErrInvalidInput {
 		t.Fatalf("wrong code: expected ErrInvalidInput, got %v", err)
 	}
-	if usr, _ := users.GetByEmail(context.Background(), "user@example.com"); usr.EmailVerified {
-		t.Fatal("account should not be verified after a wrong code")
+	if _, err := users.GetByEmail(context.Background(), "user@example.com"); err != apperrors.ErrNotFound {
+		t.Fatal("account must not be created after a wrong code")
 	}
 
 	// The correct code verifies (email match is case-insensitive via
-	// normalization) and logs the user in by issuing tokens.
+	// normalization), creates the account + workspace, and logs the user in.
 	res, err := uc.VerifyEmail(context.Background(), "USER@example.com", code)
 	if err != nil {
 		t.Fatalf("correct code: expected success, got %v", err)
@@ -187,12 +201,22 @@ func TestEmailVerificationFlow(t *testing.T) {
 	if res.AccessToken == "" || res.RefreshToken == "" {
 		t.Fatal("expected tokens to be issued on successful verification")
 	}
-	usr, _ := users.GetByEmail(context.Background(), "user@example.com")
+	usr, err := users.GetByEmail(context.Background(), "user@example.com")
+	if err != nil {
+		t.Fatalf("expected the account to now exist, got %v", err)
+	}
 	if !usr.EmailVerified {
-		t.Fatal("account should be verified after the correct code")
+		t.Fatal("account should be verified immediately on creation")
+	}
+	if len(workspaces.created) != 1 {
+		t.Fatalf("expected a workspace to be created on verification, got %d", len(workspaces.created))
+	}
+	if len(workspaces.members) != 1 {
+		t.Fatalf("expected owner membership to be created on verification, got %d", len(workspaces.members))
 	}
 
-	// The code is single-use: replaying it (now consumed) is rejected generically.
+	// The code is single-use: replaying it (pending record consumed) is
+	// rejected generically and doesn't create a second account.
 	if _, err := uc.VerifyEmail(context.Background(), "user@example.com", code); err != apperrors.ErrInvalidInput {
 		t.Fatalf("consumed code replay: expected ErrInvalidInput, got %v", err)
 	}
@@ -206,6 +230,7 @@ func TestVerifyEmailRejectsAfterMaxAttempts(t *testing.T) {
 		&fakeWorkspaceRepo{},
 		jwt.NewService("a", "b", 15*time.Minute, 7*24*time.Hour),
 		mailer,
+		newFakePendingRegistrationStore(),
 		zerolog.Nop(),
 	)
 	if _, err := uc.Register(context.Background(), "user@example.com", "password123", "Jane"); err != nil {
@@ -237,6 +262,7 @@ func TestPasswordResetFlow(t *testing.T) {
 		&fakeWorkspaceRepo{},
 		jwt.NewService("a", "b", 15*time.Minute, 7*24*time.Hour),
 		mailer,
+		newFakePendingRegistrationStore(),
 		zerolog.Nop(),
 	)
 	// An established, verified user with an active session.
@@ -294,8 +320,51 @@ type fakeUserRepo struct {
 	byID          map[uuid.UUID]*domainuser.User
 	byEmail       map[string]*domainuser.User
 	refreshByHash map[string]*domainuser.RefreshToken
-	verifications map[uuid.UUID]*domainuser.EmailVerificationCode
 	resets        map[uuid.UUID]*domainuser.PasswordResetCode
+}
+
+// fakePendingRegistrationStore is an in-memory stand-in for the Redis-backed
+// PendingRegistrationStore, used to exercise Register/ResendVerification/
+// VerifyEmail without a real Redis instance.
+type fakePendingRegistrationStore struct {
+	byEmail map[string]*domainuser.PendingRegistration
+}
+
+func newFakePendingRegistrationStore() *fakePendingRegistrationStore {
+	return &fakePendingRegistrationStore{byEmail: make(map[string]*domainuser.PendingRegistration)}
+}
+
+func (s *fakePendingRegistrationStore) Save(_ context.Context, reg domainuser.PendingRegistration) error {
+	cp := reg
+	s.byEmail[reg.Email] = &cp
+	return nil
+}
+
+func (s *fakePendingRegistrationStore) Get(_ context.Context, email string) (*domainuser.PendingRegistration, error) {
+	reg := s.byEmail[email]
+	if reg == nil {
+		return nil, apperrors.ErrNotFound
+	}
+	cp := *reg
+	return &cp, nil
+}
+
+func (s *fakePendingRegistrationStore) IncrementAttempts(_ context.Context, email string) error {
+	reg := s.byEmail[email]
+	if reg == nil {
+		return apperrors.ErrNotFound
+	}
+	reg.Attempts++
+	return nil
+}
+
+func (s *fakePendingRegistrationStore) Consume(_ context.Context, email string) (*domainuser.PendingRegistration, error) {
+	reg := s.byEmail[email]
+	if reg == nil {
+		return nil, apperrors.ErrNotFound
+	}
+	delete(s.byEmail, email)
+	return reg, nil
 }
 
 func newFakeUserRepo(t *testing.T) *fakeUserRepo {
@@ -384,48 +453,6 @@ func (r *fakeUserRepo) RevokeRefreshToken(_ context.Context, tokenHash string) e
 		return apperrors.ErrNotFound
 	}
 	rt.IsRevoked = true
-	return nil
-}
-
-func (r *fakeUserRepo) CreateEmailVerificationCode(_ context.Context, userID uuid.UUID, codeHash string, expiresAt time.Time) (*domainuser.EmailVerificationCode, error) {
-	if r.verifications == nil {
-		r.verifications = make(map[uuid.UUID]*domainuser.EmailVerificationCode)
-	}
-	vc := &domainuser.EmailVerificationCode{ID: uuid.New(), UserID: userID, CodeHash: codeHash, ExpiresAt: expiresAt}
-	r.verifications[userID] = vc
-	return vc, nil
-}
-
-func (r *fakeUserRepo) GetLatestEmailVerificationCode(_ context.Context, userID uuid.UUID) (*domainuser.EmailVerificationCode, error) {
-	vc := r.verifications[userID]
-	if vc == nil || vc.Consumed {
-		return nil, apperrors.ErrNotFound
-	}
-	return vc, nil
-}
-
-func (r *fakeUserRepo) IncrementEmailVerificationAttempts(_ context.Context, id uuid.UUID) error {
-	for _, vc := range r.verifications {
-		if vc.ID == id {
-			vc.Attempts++
-		}
-	}
-	return nil
-}
-
-func (r *fakeUserRepo) ConsumeEmailVerificationCode(_ context.Context, id uuid.UUID) error {
-	for _, vc := range r.verifications {
-		if vc.ID == id {
-			vc.Consumed = true
-		}
-	}
-	return nil
-}
-
-func (r *fakeUserRepo) InvalidateEmailVerificationCodes(_ context.Context, userID uuid.UUID) error {
-	if vc := r.verifications[userID]; vc != nil {
-		vc.Consumed = true
-	}
 	return nil
 }
 

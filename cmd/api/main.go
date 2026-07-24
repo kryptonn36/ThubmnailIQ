@@ -106,6 +106,7 @@ func main() {
 	defer redisClient.Close()
 	rateLimiter := redis.NewRateLimiter(redisClient)
 	pendingOrders := redis.NewPendingOrderStore(redisClient)
+	pendingRegs := redis.NewPendingRegistrationStore(redisClient)
 	healthChecker := health.NewChecker(pool, redisClient, cvClient)
 
 	userRepo := postgres.NewUserRepo(pool)
@@ -143,7 +144,7 @@ func main() {
 		log.Warn().Msg("no email provider configured; verification codes will be generated but not sent")
 	}
 
-	userUC := useruc.NewUsecase(userRepo, workspaceRepo, jwtSvc, mailer, log)
+	userUC := useruc.NewUsecase(userRepo, workspaceRepo, jwtSvc, mailer, pendingRegs, log)
 	workspaceUC := workspaceuc.NewUsecase(workspaceRepo, userRepo)
 	analysisUC := analysisuc.NewUsecase(analysisRepo, workspaceRepo, storage, cdnBuilder, cvClient, queueClient)
 	billingUC := billinguc.NewUsecase(billingRepo, workspaceRepo, userRepo, gateway, pendingOrders, cfg.Payment.Currency, mailer, log)

@@ -51,16 +51,17 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	usr, err := h.uc.Register(c.Request.Context(), req.Email, req.Password, req.FullName)
+	email, err := h.uc.Register(c.Request.Context(), req.Email, req.Password, req.FullName)
 	if err != nil {
 		respondError(c, err)
 		return
 	}
-	// No tokens yet — the account must verify its email first. The client
-	// should send the user to the verification screen with this email.
+	// No account exists yet — it's only created once the email is verified
+	// (see Usecase.VerifyEmail). The client should send the user to the
+	// verification screen with this email.
 	c.JSON(http.StatusCreated, gin.H{
 		"requires_verification": true,
-		"email":                 usr.Email,
+		"email":                 email,
 	})
 }
 

@@ -34,15 +34,30 @@ type RefreshToken struct {
 	IsRevoked bool
 }
 
-// EmailVerificationCode is a short-lived OTP emailed to the user. Only the
-// SHA-256 hash of the code is stored; the plaintext lives only in the email.
-type EmailVerificationCode struct {
-	ID        uuid.UUID
-	UserID    uuid.UUID
-	CodeHash  string
-	Attempts  int
-	ExpiresAt time.Time
-	Consumed  bool
+// PendingRegistration holds a not-yet-verified signup: enough to create the
+// real account once its OTP is confirmed, and nothing more. It is never
+// written to the users table — see PendingRegistrationStore — so an email
+// that's never verified leaves no permanent record behind.
+type PendingRegistration struct {
+	Email        string
+	PasswordHash string
+	FullName     string
+	CodeHash     string
+	Attempts     int
+	ExpiresAt    time.Time
+}
+
+// PendingRegistrationStore persists PendingRegistrations between Register and
+// VerifyEmail. Entries carry a TTL so an abandoned signup simply expires
+// instead of leaving unverified data behind; the concrete implementation
+// lives in internal/infra/redis, mirroring payment.PendingOrderStore.
+type PendingRegistrationStore interface {
+	Save(ctx context.Context, reg PendingRegistration) error
+	Get(ctx context.Context, email string) (*PendingRegistration, error)
+	IncrementAttempts(ctx context.Context, email string) error
+	// Consume atomically reads and deletes the record, so a verification
+	// code can't be replayed to create the account twice.
+	Consume(ctx context.Context, email string) (*PendingRegistration, error)
 }
 
 // PasswordResetCode is a short-lived OTP emailed to a user who requested a
@@ -64,11 +79,6 @@ type Repository interface {
 	GetRefreshToken(ctx context.Context, tokenHash string) (*RefreshToken, error)
 	RevokeRefreshToken(ctx context.Context, tokenHash string) error
 
-	CreateEmailVerificationCode(ctx context.Context, userID uuid.UUID, codeHash string, expiresAt time.Time) (*EmailVerificationCode, error)
-	GetLatestEmailVerificationCode(ctx context.Context, userID uuid.UUID) (*EmailVerificationCode, error)
-	IncrementEmailVerificationAttempts(ctx context.Context, id uuid.UUID) error
-	ConsumeEmailVerificationCode(ctx context.Context, id uuid.UUID) error
-	InvalidateEmailVerificationCodes(ctx context.Context, userID uuid.UUID) error
 	MarkEmailVerified(ctx context.Context, userID uuid.UUID) error
 
 	CreatePasswordResetCode(ctx context.Context, userID uuid.UUID, codeHash string, expiresAt time.Time) (*PasswordResetCode, error)

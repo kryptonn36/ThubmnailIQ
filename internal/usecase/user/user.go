@@ -30,15 +30,16 @@ type Mailer interface {
 }
 
 type Usecase struct {
-	users      user.Repository
-	workspaces workspace.Repository
-	jwt        *jwt.Service
-	mailer     Mailer
-	log        zerolog.Logger
+	users       user.Repository
+	workspaces  workspace.Repository
+	jwt         *jwt.Service
+	mailer      Mailer
+	pendingRegs user.PendingRegistrationStore
+	log         zerolog.Logger
 }
 
-func NewUsecase(users user.Repository, workspaces workspace.Repository, jwtSvc *jwt.Service, mailer Mailer, log zerolog.Logger) *Usecase {
-	return &Usecase{users: users, workspaces: workspaces, jwt: jwtSvc, mailer: mailer, log: log}
+func NewUsecase(users user.Repository, workspaces workspace.Repository, jwtSvc *jwt.Service, mailer Mailer, pendingRegs user.PendingRegistrationStore, log zerolog.Logger) *Usecase {
+	return &Usecase{users: users, workspaces: workspaces, jwt: jwtSvc, mailer: mailer, pendingRegs: pendingRegs, log: log}
 }
 
 type AuthResult struct {
@@ -48,31 +49,124 @@ type AuthResult struct {
 	User         *user.User
 }
 
-// Register creates the account and its workspace and emails a verification
-// code, but deliberately does NOT log the user in: no tokens are issued until
-// the email is verified (see VerifyEmail). This keeps unverified accounts out
-// of the app entirely, consistent with Login rejecting unverified users.
-func (u *Usecase) Register(ctx context.Context, email, password, fullName string) (*user.User, error) {
+// Register does NOT create an account. It validates the input, generates an
+// OTP, and stashes everything needed to create the account (email, password
+// hash, full name) as a PendingRegistration — nothing is written to the users
+// table yet. The real account, its workspace, and owner membership are only
+// created in VerifyEmail once the OTP is confirmed; if it's never verified,
+// the pending record simply expires and no trace of the signup remains.
+// Returns the normalized email for the handler to echo back to the client.
+func (u *Usecase) Register(ctx context.Context, email, password, fullName string) (string, error) {
 	email = validator.NormalizeEmail(email)
 	fullName = strings.TrimSpace(fullName)
 	if !validator.IsValidEmail(email) || !validator.IsValidPassword(password) || fullName == "" {
-		return nil, errors.ErrInvalidInput
+		return "", errors.ErrInvalidInput
 	}
+	// Only guards against an already-verified account with this email; a
+	// leftover pending registration for the same address is fine to
+	// overwrite below (e.g. retrying after a typo before verifying).
 	if existing, _ := u.users.GetByEmail(ctx, email); existing != nil {
-		return nil, errors.ErrAlreadyExists
+		return "", errors.ErrAlreadyExists
 	}
 
 	passwordHash, err := hash.HashPassword(password)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	created, err := u.users.Create(ctx, email, passwordHash, fullName)
+	code, err := hash.GenerateNumericOTP(otpLength)
+	if err != nil {
+		return "", err
+	}
+	pending := user.PendingRegistration{
+		Email:        email,
+		PasswordHash: passwordHash,
+		FullName:     fullName,
+		CodeHash:     hash.SHA256Hex(code),
+		ExpiresAt:    time.Now().Add(otpTTL),
+	}
+	if err := u.pendingRegs.Save(ctx, pending); err != nil {
+		return "", err
+	}
+
+	// Send the verification code best-effort: a mail failure must not block
+	// signup. The user can request a fresh code via ResendVerification if
+	// this send doesn't land.
+	if err := u.sendVerificationEmail(ctx, email, fullName, code); err != nil {
+		u.log.Error().Err(err).Str("email", email).Msg("sending verification code on register")
+	}
+
+	return email, nil
+}
+
+// sendVerificationEmail delivers the OTP itself; callers (Register,
+// ResendVerification) own generating the code and persisting its hash. It's a
+// no-op (with a warning) when no mailer is configured, so local dev works
+// without SMTP/MailerSend credentials.
+func (u *Usecase) sendVerificationEmail(ctx context.Context, email, fullName, code string) error {
+	if u.mailer == nil {
+		u.log.Warn().Str("email", email).Msg("no mailer configured; verification code generated but not emailed")
+		return nil
+	}
+
+	subject := "Your ThumbnailIQ verification code"
+	minutes := int(otpTTL.Minutes())
+	text := fmt.Sprintf("Hi %s,\n\nYour ThumbnailIQ verification code is: %s\n\nIt expires in %d minutes. If you didn't create an account, you can ignore this email.",
+		fullName, code, minutes)
+	html := fmt.Sprintf(`<p>Hi %s,</p><p>Your ThumbnailIQ verification code is:</p>`+
+		`<p style="font-size:28px;font-weight:bold;letter-spacing:4px">%s</p>`+
+		`<p>It expires in %d minutes. If you didn't create an account, you can ignore this email.</p>`,
+		fullName, code, minutes)
+	return u.mailer.Send(ctx, email, subject, text, html)
+}
+
+// VerifyEmail checks an OTP the user submits and, on success, creates the real
+// account (plus its workspace and owner membership) from the pending
+// registration and logs the user in (issues tokens) — the validated code is
+// proof of email ownership, like clicking a magic link. Errors are
+// deliberately uniform (ErrInvalidInput) so the endpoint can't be used to
+// probe which emails have a pending signup or which codes are close. Because
+// a matched code is consumed, a replay of the same code fails generically, so
+// there's no token issuance — and no account creation — without a fresh
+// validated code.
+func (u *Usecase) VerifyEmail(ctx context.Context, email, code string) (*AuthResult, error) {
+	email = validator.NormalizeEmail(email)
+	pending, err := u.pendingRegs.Get(ctx, email)
+	if err != nil {
+		return nil, errors.ErrInvalidInput
+	}
+	if time.Now().After(pending.ExpiresAt) || pending.Attempts >= maxOTPAttempts {
+		return nil, errors.ErrInvalidInput
+	}
+	if hash.SHA256Hex(code) != pending.CodeHash {
+		// Count the failed try so a code can't be brute-forced indefinitely.
+		if incErr := u.pendingRegs.IncrementAttempts(ctx, email); incErr != nil {
+			u.log.Error().Err(incErr).Msg("incrementing pending registration attempts")
+		}
+		return nil, errors.ErrInvalidInput
+	}
+
+	// The code matched: consume the pending registration (single use — a
+	// replay can't create the account twice) before touching Postgres.
+	if _, err := u.pendingRegs.Consume(ctx, email); err != nil {
+		return nil, errors.ErrInvalidInput
+	}
+	// Guard against the tiny race where the account was already created by a
+	// concurrent verification of the same pending record.
+	if existing, _ := u.users.GetByEmail(ctx, email); existing != nil {
+		return nil, errors.ErrAlreadyExists
+	}
+
+	created, err := u.users.Create(ctx, email, pending.PasswordHash, pending.FullName)
 	if err != nil {
 		return nil, err
 	}
+	if err := u.users.MarkEmailVerified(ctx, created.ID); err != nil {
+		return nil, err
+	}
+	created.EmailVerified = true
 
-	slug := fmt.Sprintf("%s-%s", validator.Slugify(fullName), created.ID.String()[:8])
-	ws, err := u.workspaces.Create(ctx, fmt.Sprintf("%s's Workspace", fullName), slug, created.ID)
+	slug := fmt.Sprintf("%s-%s", validator.Slugify(pending.FullName), created.ID.String()[:8])
+	ws, err := u.workspaces.Create(ctx, fmt.Sprintf("%s's Workspace", pending.FullName), slug, created.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -80,97 +174,34 @@ func (u *Usecase) Register(ctx context.Context, email, password, fullName string
 		return nil, err
 	}
 
-	// Send the verification code best-effort: a mail/SMTP failure must not lose
-	// a just-created account. The user can request a fresh code via
-	// ResendVerification if this send doesn't land.
-	if err := u.SendVerificationCode(ctx, created); err != nil {
-		u.log.Error().Err(err).Str("user_id", created.ID.String()).Msg("sending verification code on register")
-	}
-
-	return created, nil
+	return u.issueTokens(ctx, created, "")
 }
 
-// SendVerificationCode generates a fresh OTP, invalidates any earlier codes for
-// the user, stores only its hash, and emails the plaintext code. It's a no-op
-// (with a warning) when no mailer is configured, so local dev works without SMTP.
-func (u *Usecase) SendVerificationCode(ctx context.Context, usr *user.User) error {
-	code, err := hash.GenerateNumericOTP(otpLength)
-	if err != nil {
-		return err
-	}
-	if err := u.users.InvalidateEmailVerificationCodes(ctx, usr.ID); err != nil {
-		return err
-	}
-	if _, err := u.users.CreateEmailVerificationCode(ctx, usr.ID, hash.SHA256Hex(code), time.Now().Add(otpTTL)); err != nil {
-		return err
-	}
-
-	if u.mailer == nil {
-		u.log.Warn().Str("user_id", usr.ID.String()).Msg("no mailer configured; verification code generated but not emailed")
-		return nil
-	}
-
-	subject := "Your ThumbnailIQ verification code"
-	minutes := int(otpTTL.Minutes())
-	text := fmt.Sprintf("Hi %s,\n\nYour ThumbnailIQ verification code is: %s\n\nIt expires in %d minutes. If you didn't create an account, you can ignore this email.",
-		usr.FullName, code, minutes)
-	html := fmt.Sprintf(`<p>Hi %s,</p><p>Your ThumbnailIQ verification code is:</p>`+
-		`<p style="font-size:28px;font-weight:bold;letter-spacing:4px">%s</p>`+
-		`<p>It expires in %d minutes. If you didn't create an account, you can ignore this email.</p>`,
-		usr.FullName, code, minutes)
-	return u.mailer.Send(ctx, usr.Email, subject, text, html)
-}
-
-// VerifyEmail checks an OTP the user submits and, on success, marks their email
-// verified and logs them in (issues tokens) — the validated code is proof of
-// email ownership, like clicking a magic link. Errors are deliberately uniform
-// (ErrInvalidInput) so the endpoint can't be used to probe which emails exist
-// or which codes are close. Because a matched code is consumed, a replay of the
-// same code fails generically, so there's no token issuance without a fresh
-// validated code.
-func (u *Usecase) VerifyEmail(ctx context.Context, email, code string) (*AuthResult, error) {
-	email = validator.NormalizeEmail(email)
-	usr, err := u.users.GetByEmail(ctx, email)
-	if err != nil {
-		return nil, errors.ErrInvalidInput
-	}
-
-	vc, err := u.users.GetLatestEmailVerificationCode(ctx, usr.ID)
-	if err != nil {
-		return nil, errors.ErrInvalidInput
-	}
-	if time.Now().After(vc.ExpiresAt) || vc.Attempts >= maxOTPAttempts {
-		return nil, errors.ErrInvalidInput
-	}
-	if hash.SHA256Hex(code) != vc.CodeHash {
-		// Count the failed try so a code can't be brute-forced indefinitely.
-		if incErr := u.users.IncrementEmailVerificationAttempts(ctx, vc.ID); incErr != nil {
-			u.log.Error().Err(incErr).Msg("incrementing email verification attempts")
-		}
-		return nil, errors.ErrInvalidInput
-	}
-
-	if err := u.users.ConsumeEmailVerificationCode(ctx, vc.ID); err != nil {
-		return nil, err
-	}
-	if err := u.users.MarkEmailVerified(ctx, usr.ID); err != nil {
-		return nil, err
-	}
-	usr.EmailVerified = true
-	return u.issueTokens(ctx, usr, "")
-}
-
-// ResendVerification issues a new code for an unverified account. It never
-// reveals whether the email exists or is already verified — callers always see
-// success — so it can't be used for account enumeration.
+// ResendVerification issues a new code for a pending (not yet verified)
+// signup. It never reveals whether a pending registration exists for this
+// email — callers always see success — so it can't be used for enumeration.
 func (u *Usecase) ResendVerification(ctx context.Context, email string) error {
 	email = validator.NormalizeEmail(email)
-	usr, err := u.users.GetByEmail(ctx, email)
-	if err != nil || usr.EmailVerified {
+	pending, err := u.pendingRegs.Get(ctx, email)
+	if err != nil {
 		return nil
 	}
-	if err := u.SendVerificationCode(ctx, usr); err != nil {
-		u.log.Error().Err(err).Str("user_id", usr.ID.String()).Msg("resending verification code")
+
+	code, err := hash.GenerateNumericOTP(otpLength)
+	if err != nil {
+		u.log.Error().Err(err).Str("email", email).Msg("generating resend verification code")
+		return nil
+	}
+	pending.CodeHash = hash.SHA256Hex(code)
+	pending.Attempts = 0
+	pending.ExpiresAt = time.Now().Add(otpTTL)
+	if err := u.pendingRegs.Save(ctx, *pending); err != nil {
+		u.log.Error().Err(err).Str("email", email).Msg("resaving pending registration")
+		return nil
+	}
+
+	if err := u.sendVerificationEmail(ctx, email, pending.FullName, code); err != nil {
+		u.log.Error().Err(err).Str("email", email).Msg("resending verification code")
 	}
 	return nil
 }
