@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -129,7 +130,9 @@ type Config struct {
 func Load() (*Config, error) {
 	err := godotenv.Load()
 	if err != nil {
-		return nil, fmt.Errorf("error in loading env file: %v", err)
+		if !os.IsNotExist(err){
+			return nil, fmt.Errorf("error in loading env file: %v", err)
+		}
 	}
 
 	v := viper.New()
