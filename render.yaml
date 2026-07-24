@@ -20,7 +20,7 @@ databases:
   - name: thumbnailiq-db
     databaseName: thumbnailiq
     user: thumbnailiq
-    plan: basic-256mb
+    plan: Hobby
     region: Singapore
 
 services:
@@ -31,7 +31,7 @@ services:
     runtime: docker # if Render rejects this key, try `env: docker` instead
     dockerfilePath: ./services/cv/Dockerfile
     dockerContext: ./services/cv
-    plan: starter
+    plan: Hobby
     region: Singapore
     healthCheckPath: /health
     envVars:
@@ -44,7 +44,7 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    plan: starter
+    plan: Hobby
     region: Singapore
     healthCheckPath: /health
     envVars:
@@ -139,7 +139,7 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
     dockerCommand: ./worker
-    plan: starter
+    plan: Hobby
     region: Singapore
     envVars:
       - key: SERVER_ENV
