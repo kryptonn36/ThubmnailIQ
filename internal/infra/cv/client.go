@@ -15,7 +15,12 @@ type Client struct {
 }
 
 func NewClient(baseURL string) *Client {
-	return &Client{baseURL: baseURL, http: &http.Client{Timeout: 30 * time.Second}}
+	// 90s rather than a typical single-digit-second API timeout: on a
+	// free-tier host the CV service can be asleep and need a genuine cold
+	// start (container scheduling + boot, not just a process wake-up) before
+	// it answers its first request in a while. A short timeout here turns a
+	// slow-but-successful first call into an outright failure.
+	return &Client{baseURL: baseURL, http: &http.Client{Timeout: 90 * time.Second}}
 }
 
 func (c *Client) Analyze(ctx context.Context, imageURL string) (*Result, error) {
