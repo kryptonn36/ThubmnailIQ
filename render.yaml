@@ -34,6 +34,7 @@ services:
     runtime: docker # if Render rejects this key, try `env: docker` instead
     dockerfilePath: ./services/cv/Dockerfile
     dockerContext: ./services/cv
+    plan: free
     region: Singapore
     healthCheckPath: /health
     envVars:
@@ -46,6 +47,7 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
+    plan: free
     region: Singapore
     healthCheckPath: /health
     envVars:
