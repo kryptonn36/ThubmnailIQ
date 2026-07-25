@@ -20,7 +20,10 @@ databases:
   - name: thumbnailiq-db
     databaseName: thumbnailiq
     user: thumbnailiq
-    plan: Hobby
+    # No plan pinned here — Render's valid plan slugs vary by account/region
+    # (a couple of guesses here were already rejected), so pick the tier
+    # interactively when Render prompts for it during Blueprint creation, or
+    # set it afterward under the database's Settings.
     region: Singapore
 
 services:
@@ -31,7 +34,6 @@ services:
     runtime: docker # if Render rejects this key, try `env: docker` instead
     dockerfilePath: ./services/cv/Dockerfile
     dockerContext: ./services/cv
-    plan: Hobby
     region: Singapore
     healthCheckPath: /health
     envVars:
@@ -44,7 +46,6 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    plan: Hobby
     region: Singapore
     healthCheckPath: /health
     envVars:
@@ -139,7 +140,6 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
     dockerCommand: ./worker
-    plan: Hobby
     region: Singapore
     envVars:
       - key: SERVER_ENV
