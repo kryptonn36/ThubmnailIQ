@@ -11,6 +11,112 @@ import { Input } from "@/components/ui/Input";
 import { useMotionVariants } from "@/lib/motion";
 import type { AnalysisCreateResponse } from "@/types";
 
+// Client-side image compression function
+async function compressImage(
+  file: File,
+  options: {
+    maxSizeMB?: number;
+    maxWidthOrHeight?: number;
+    useWebWorker?: boolean;
+    initialQuality?: number;
+  } = {}
+): Promise<File> {
+  const { maxSizeMB = 0.5, maxWidthOrHeight = 1920, useWebWorker = true, initialQuality = 0.8 } = options;
+
+  // Return early if file is already small enough
+  if (file.size <= maxSizeMB * 1024 * 1024) {
+    return file;
+  }
+
+  // Use Web Worker if available and requested
+  if (useWebWorker && typeof Worker !== 'undefined') {
+    return new Promise((resolve, reject) => {
+      const worker = new Worker(new URL('./image-compressor.worker.ts', import.meta.url));
+
+      worker.onmessage = (e) => {
+        if (e.data.error) {
+          reject(e.data.error);
+        } else {
+          resolve(e.data.compressedFile);
+        }
+        worker.terminate();
+      };
+
+      worker.onerror = (error) => {
+        reject(error);
+        worker.terminate();
+      };
+
+      worker.postMessage({ file, options: { maxSizeMB, maxWidthOrHeight, initialQuality } });
+    });
+  }
+
+  // Fallback to main thread compression
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onerror = (err) => reject(err);
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+
+      if (!ctx) {
+        reject(new Error('Could not get canvas context'));
+        return;
+      }
+
+      // Calculate dimensions maintaining aspect ratio
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height && width > maxWidthOrHeight) {
+        height = Math.round((height * maxWidthOrHeight) / width);
+        width = maxWidthOrHeight;
+      } else if (height > width && height > maxWidthOrHeight) {
+        width = Math.round((width * maxWidthOrHeight) / height);
+        height = maxWidthOrHeight;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+
+      // Draw image on canvas
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // Convert to blob with quality adjustment
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            reject(new Error('Failed to create blob from canvas'));
+            return;
+          }
+
+          // Check if compressed file is still too large, reduce quality if needed
+          if (blob.size > maxSizeMB * 1024 * 1024 && initialQuality > 0.1) {
+            // Recursively try with lower quality
+            compressImage(file, {
+              maxSizeMB,
+              maxWidthOrHeight,
+              useWebWorker: false,
+              initialQuality: initialQuality * 0.8
+            }).then(resolve).catch(reject);
+          } else {
+            // Create File object from blob
+            const compressedFile = new File([blob], file.name, {
+              type: blob.type,
+              lastModified: Date.now()
+            });
+            resolve(compressedFile);
+          }
+        },
+        file.type || 'image/jpeg',
+        initialQuality
+      );
+    };
+
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 export default function NewAnalysisPage() {
   const router = useRouter();
   const { fadeInUp } = useMotionVariants();
@@ -44,13 +150,21 @@ export default function NewAnalysisPage() {
     setError(null);
     setSubmitting(true);
     try {
+      // Compress the image before upload
+      const compressedFile = await compressImage(file, {
+        maxSizeMB: 0.5,          // target max size ~500KB
+        maxWidthOrHeight: 1920,  // cap dimensions
+        useWebWorker: true,
+        initialQuality: 0.8,
+      });
+
       const formData = new FormData();
-      formData.append("thumbnail", file);
+      formData.append("thumbnail", compressedFile);
       formData.append("keyword", keyword.trim());
       const res = await api.postForm<AnalysisCreateResponse>("/analyses", formData);
       router.push(`/dashboard/analyses/${res.id}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to start analysis.");
+      setError(err instanceof ApiError ? err.message : "Failed to compress or upload image.");
       setSubmitting(false);
     }
   }
