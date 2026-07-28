@@ -40,11 +40,24 @@ async def _load_image_from_url(image_url: str) -> Image.Image:
 
 
 def _run_pipeline(pil_image: Image.Image) -> dict:
-    cv_image = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
+    # Resize image to prevent excessive processing time on large images
+    # Maintains aspect ratio while ensuring no dimension exceeds MAX_DIMENSION
+    MAX_DIMENSION = 1920
+    if max(pil_image.size) > MAX_DIMENSION:
+        # Create a copy to avoid modifying the original
+        process_image = pil_image.copy()
+        # thumbnail() modifies the image in-place and maintains aspect ratio
+        process_image.thumbnail((MAX_DIMENSION, MAX_DIMENSION), Image.Resampling.LANCZOS)
+    else:
+        process_image = pil_image
 
-    ocr_result = extract_text(pil_image)
+    # Use the (potentially resized) image for all processing
+    cv_image = cv2.cvtColor(np.array(process_image), cv2.COLOR_RGB2BGR)
+
+    # These now work on reasonably-sized images
+    ocr_result = extract_text(process_image)
     face_result = analyze_faces(cv_image)
-    color_result = analyze_colors(pil_image)
+    color_result = analyze_colors(process_image)
     clutter_result = analyze_clutter(cv_image)
 
     visual_complexity = round(
