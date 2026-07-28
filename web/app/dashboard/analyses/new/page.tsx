@@ -32,9 +32,9 @@ async function compressImage(
   // Web workers can cause issues in some environments, especially with Next.js
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onerror = (err) => {
-      console.error('Image loading error:', err);
-      reject(new Error(`Failed to load image: ${err.message}`));
+    img.onerror = () => {
+      console.error('Image loading error');
+      reject(new Error('Failed to load image'));
     };
     img.onload = () => {
       try {
