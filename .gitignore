@@ -33,3 +33,9 @@ npm-debug.log*
 *.log
 .claude
 .claudeignore
+.agents
+
+
+PROJECT_STRUCTURE.md
+thumbnailiq_blueprint.md
+ADMIN_PANEL.md
